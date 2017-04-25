@@ -1415,7 +1415,6 @@ void UpdateCoins(const CTransaction& tx, CCoinsViewCache& inputs, CTxUndo &txund
                 CTxInUndo& undo = txundo.vprevout.back();
                 undo.nHeight = coins->nHeight;
                 undo.fCoinBase = coins->fCoinBase;
-                undo.nVersion = coins->nVersion;
             }
         }
     }
@@ -1651,7 +1650,6 @@ int ApplyTxInUndo(const CTxInUndo& undo, CCoinsViewCache& view, const COutPoint&
         if (!coins->IsPruned()) fClean = false; // overwriting existing transaction
         coins->fCoinBase = undo.fCoinBase;
         coins->nHeight = undo.nHeight;
-        coins->nVersion = undo.nVersion;
     } else {
         if (coins->IsPruned()) fClean = false; // adding output to missing transaction
     }
@@ -1694,11 +1692,6 @@ bool DisconnectBlock(const CBlock& block, CValidationState& state, const CBlockI
         outs->ClearUnspendable();
 
         CCoins outsBlock(tx, pindex->nHeight);
-        // The CCoins serialization does not serialize negative numbers.
-        // No network rules currently depend on the version here, so an inconsistency is harmless
-        // but it must be corrected before txout nversion ever influences a network rule.
-        if (outsBlock.nVersion < 0)
-            outs->nVersion = outsBlock.nVersion;
         if (*outs != outsBlock) fClean = false; // transaction mismatch
 
         // remove outputs
