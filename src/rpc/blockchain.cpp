@@ -14,6 +14,8 @@
 #include "consensus/validation.h"
 #include "core_io.h"
 #include "dogecoin.h"
+#include "fs.h"
+#include "node/utxo_snapshot.h"
 #include "validation.h"
 #include "policy/policy.h"
 #include "primitives/transaction.h"
@@ -1867,6 +1869,99 @@ static UniValue getblockstats(const JSONRPCRequest& request)
     return ret;
 }
 
+/**
+ * Serialize the UTXO set to a file for loading elsewhere.
+ *
+ * @see SnapshotMetadata
+ */
+UniValue dumptxoutset(const JSONRPCRequest& request)
+{
+    if (request.fHelp || request.params.size() != 1)
+        throw runtime_error(
+            "dumptxoutset \"path\"\n"
+            "\nWrite the serialized UTXO set to disk.\n"
+            "Incidentally flushes the latest chainstate database to disk.\n"
+            "\nArguments:\n"
+            "1. \"path\"     (string, required) Path to the output file. If relative, will be prefixed by datadir.\n"
+            "\nResult:\n"
+            "{\n"
+            "  \"coins_written\": n,     (numeric) The number of coins written in the snapshot\n"
+            "  \"base_hash\": \"hex\",    (string) The hash of the base of the snapshot\n"
+            "  \"base_height\": n,       (numeric) The height of the base of the snapshot\n"
+            "  \"path\": \"path\"         (string) The absolute path to the snapshot file\n"
+            "}\n"
+            "\nExamples:\n"
+            + HelpExampleCli("dumptxoutset", "\"utxo.dat\"")
+            + HelpExampleRpc("dumptxoutset", "\"utxo.dat\"")
+        );
+
+    fs::path path = fs::absolute(request.params[0].get_str(), GetDataDir());
+    fs::path temppath = fs::absolute(request.params[0].get_str() + ".incomplete", GetDataDir());
+
+    if (fs::exists(path) || fs::exists(temppath)) {
+        throw JSONRPCError(
+            RPC_INVALID_PARAMETER,
+            path.string() + " or its temporary file already exists. Move it out of the way first");
+    }
+
+    FILE* file = fsbridge::fopen(temppath, "wb");
+    if (file == nullptr) {
+        throw JSONRPCError(RPC_INVALID_PARAMETER, "Couldn't open file " + temppath.string() + " for writing");
+    }
+
+    CAutoFile afile(file, SER_DISK, CLIENT_VERSION);
+    std::unique_ptr<CCoinsViewCursor> pcursor;
+    CCoinsStats stats;
+    CBlockIndex* tip;
+
+    {
+        LOCK(cs_main);
+        FlushStateToDisk();
+
+        if (!GetUTXOStats(pcoinsdbview, stats)) {
+            throw JSONRPCError(RPC_INTERNAL_ERROR, "Unable to read UTXO set");
+        }
+
+        pcursor = std::unique_ptr<CCoinsViewCursor>(pcoinsdbview->Cursor());
+        BlockMap::iterator it = mapBlockIndex.find(stats.hashBlock);
+        if (it == mapBlockIndex.end()) {
+            throw JSONRPCError(RPC_INTERNAL_ERROR, "Unable to find UTXO base block");
+        }
+        tip = it->second;
+    }
+
+    SnapshotMetadata metadata(tip->GetBlockHash(), stats.coins_count, tip->nChainTx);
+    afile << metadata;
+
+    COutPoint key;
+    Coin coin;
+    unsigned int iter = 0;
+
+    while (pcursor->Valid()) {
+        if (iter % 5000 == 0 && !IsRPCRunning()) {
+            throw JSONRPCError(RPC_CLIENT_NOT_CONNECTED, "Shutting down");
+        }
+        ++iter;
+        if (pcursor->GetKey(key) && pcursor->GetValue(coin)) {
+            afile << key;
+            afile << coin;
+        } else {
+            throw JSONRPCError(RPC_INTERNAL_ERROR, "Unable to read UTXO set");
+        }
+        pcursor->Next();
+    }
+
+    afile.fclose();
+    fs::rename(temppath, path);
+
+    UniValue result(UniValue::VOBJ);
+    result.pushKV("coins_written", (int64_t)stats.coins_count);
+    result.pushKV("base_hash", tip->GetBlockHash().GetHex());
+    result.pushKV("base_height", (int64_t)tip->nHeight);
+    result.pushKV("path", path.string());
+    return result;
+}
+
 static const CRPCCommand commands[] =
 { //  category              name                      actor (function)         okSafe argNames
   //  --------------------- ------------------------  -----------------------  ------ ----------
@@ -1897,6 +1992,7 @@ static const CRPCCommand commands[] =
     { "hidden",             "waitfornewblock",        &waitfornewblock,        true,  {"timeout"} },
     { "hidden",             "waitforblock",           &waitforblock,           true,  {"blockhash","timeout"} },
     { "hidden",             "waitforblockheight",     &waitforblockheight,     true,  {"height","timeout"} },
+    { "hidden",             "dumptxoutset",           &dumptxoutset,           true,  {"path"} },
 };
 
 void RegisterBlockchainRPCCommands(CRPCTable &t)
