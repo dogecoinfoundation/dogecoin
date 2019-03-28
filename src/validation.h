@@ -15,6 +15,7 @@
 #include "chain.h"
 #include "coins.h"
 #include "fs.h"
+#include "node/utxo_snapshot.h"
 #include "policy/policy.h" // For RECOMMENDED_MIN_TX_FEE
 #include "protocol.h" // For CMessageHeader::MessageStartChars
 #include "script/script_error.h"
