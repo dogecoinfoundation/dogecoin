@@ -860,15 +860,14 @@ UniValue getblock(const JSONRPCRequest& request)
 
 struct CCoinsStats
 {
-    int nHeight;
-    uint256 hashBlock;
-    uint64_t nTransactions;
-    uint64_t nTransactionOutputs;
-    uint256 hashSerialized;
-    uint64_t nDiskSize;
-    arith_uint256 nTotalAmount;
-
-    CCoinsStats() : nHeight(0), nTransactions(0), nTransactionOutputs(0), nDiskSize(0), nTotalAmount(0) {}
+    int nHeight{0};
+    uint256 hashBlock{};
+    uint64_t nTransactions{0};
+    uint64_t nTransactionOutputs{0};
+    uint256 hashSerialized{};
+    uint64_t nDiskSize{0};
+    arith_uint256 nTotalAmount{0};
+    uint64_t coins_count{0};
 };
 
 static void ApplyStats(CCoinsStats &stats, CHashWriter& ss, const uint256& hash, const std::map<uint32_t, Coin>& outputs)
@@ -890,6 +889,7 @@ static void ApplyStats(CCoinsStats &stats, CHashWriter& ss, const uint256& hash,
 //! Calculate statistics about the unspent transaction output set
 static bool GetUTXOStats(CCoinsView *view, CCoinsStats &stats)
 {
+    stats = CCoinsStats();
     std::unique_ptr<CCoinsViewCursor> pcursor(view->Cursor());
 
     CHashWriter ss(SER_GETHASH, PROTOCOL_VERSION);
@@ -912,6 +912,7 @@ static bool GetUTXOStats(CCoinsView *view, CCoinsStats &stats)
             }
             prevkey = key.hash;
             outputs[key.n] = std::move(coin);
+            stats.coins_count++;
         } else {
             return error("%s: unable to read value", __func__);
         }
