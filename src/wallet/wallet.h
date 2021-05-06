@@ -60,7 +60,7 @@ static const CAmount WALLET_INCREMENTAL_RELAY_FEE = COIN/10 * 5;
 //! target minimum change amount
 static const CAmount MIN_CHANGE = COIN;
 //! final minimum change amount after paying for fees
-static const CAmount MIN_FINAL_CHANGE = COIN;
+static const CAmount MIN_FINAL_CHANGE = COIN/100;
 //! Default for -spendzeroconfchange
 static const bool DEFAULT_SPEND_ZEROCONF_CHANGE = true;
 //! Default for -sendfreetransactions
@@ -72,7 +72,8 @@ static const unsigned int DEFAULT_TX_CONFIRM_TARGET = 6;
 //! -walletrbf default
 static const bool DEFAULT_WALLET_RBF = false;
 //! Largest (in bytes) free transaction we're willing to create
-static const unsigned int MAX_FREE_TRANSACTION_CREATE_SIZE = 0;
+//mlumin: 5/2021 increase max free tx create size to 1000 bytes
+static const unsigned int MAX_FREE_TRANSACTION_CREATE_SIZE = 1000;
 static const bool DEFAULT_WALLETBROADCAST = true;
 static const bool DEFAULT_DISABLE_WALLET = false;
 //! if set, all keys will be derived by using BIP32
