@@ -25,6 +25,7 @@
 #include "net.h"
 #include "net_processing.h"
 #include "policy/policy.h"
+#include "primitives/transaction.h"
 #include "rpc/server.h"
 #include "rpc/register.h"
 #include "script/standard.h"
@@ -445,6 +446,8 @@ std::string HelpMessage(HelpMessageMode mode)
     if (showDebug)
         strUsage += HelpMessageOpt("-nodebug", "Turn off debugging messages, same as -debug=0");
     strUsage += HelpMessageOpt("-help-debug", _("Show all debugging options (usage: --help -help-debug)"));
+    strUsage += HelpMessageOpt("-dustlimit=<amt>", strprintf(_("Amounts smaller than this are considered dust (default: %s)"),
+        FormatMoney(DEFAULT_DUST_THRESHOLD)));
     strUsage += HelpMessageOpt("-logips", strprintf(_("Include IP addresses in debug output (default: %u)"), DEFAULT_LOGIPS));
     strUsage += HelpMessageOpt("-logtimestamps", strprintf(_("Prepend debug output with timestamp (default: %u)"), DEFAULT_LOGTIMESTAMPS));
     if (showDebug)
@@ -999,6 +1002,15 @@ bool AppInitParameterInteraction()
     nConnectTimeout = GetArg("-timeout", DEFAULT_CONNECT_TIMEOUT);
     if (nConnectTimeout <= 0)
         nConnectTimeout = DEFAULT_CONNECT_TIMEOUT;
+
+    // Amount below which is considered dust
+    if (IsArgSet("-dustlimit"))
+    {
+        CAmount n = 0;
+        if (!ParseMoney(GetArg("-dustlimit", ""), n) || 0 == n)
+            return InitError(AmountErrMsg("dustlimit", GetArg("-dustlimit", "")));
+        ::nDustLimit = n;
+    }
 
     // Fee-per-kilobyte amount considered the same as "free"
     // If you are mining, be careful setting this:

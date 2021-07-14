@@ -11,9 +11,16 @@
 #include "serialize.h"
 #include "uint256.h"
 
+//rnicoll 7/2021: make dust limit configurable, which includes introducing a global default.
+static const unsigned int DEFAULT_DUST_THRESHOLD = COIN / 100;
+
 static const int SERIALIZE_TRANSACTION_NO_WITNESS = 0x40000000;
 
 static const int WITNESS_SCALE_FACTOR = 4;
+
+/** An amount smaller than this is considered dust */
+//rnicoll 7/2021: Introduced value which can be overriden at run time.
+extern CAmount nDustLimit;
 
 /** An outpoint - a combination of a transaction hash and an index n into its vout */
 class COutPoint
@@ -178,24 +185,8 @@ public:
         if (scriptPubKey.IsUnspendable())
             return 0;
 
-        /*
-        size_t nSize = GetSerializeSize(*this, SER_DISK, 0);
-        int witnessversion = 0;
-        std::vector<unsigned char> witnessprogram;
-
-        if (scriptPubKey.IsWitnessProgram(witnessversion, witnessprogram)) {
-            // sum the sizes of the parts of a transaction input
-            // with 75% segwit discount applied to the script size.
-            nSize += (32 + 4 + 1 + (107 / WITNESS_SCALE_FACTOR) + 4);
-        } else {
-            nSize += (32 + 4 + 1 + 107 + 4); // the 148 mentioned above
-        }
-
-        return 3 * minRelayTxFee.GetFee(nSize);
-        */
-
-        // Dogecoin: Anything below 1 DOGE is always dust
-        return COIN;
+        // rnicoll 2021-07: Reduce dust threshold to 0.01
+        return nDustLimit;
     }
 
     bool IsDust(const CFeeRate &minRelayTxFeeRate) const
