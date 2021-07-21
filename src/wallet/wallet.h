@@ -72,8 +72,7 @@ static const unsigned int DEFAULT_TX_CONFIRM_TARGET = 6;
 //! -walletrbf default
 static const bool DEFAULT_WALLET_RBF = false;
 //! Largest (in bytes) free transaction we're willing to create
-//mlumin: 5/2021 increase max free tx create size to 1000 bytes
-static const unsigned int MAX_FREE_TRANSACTION_CREATE_SIZE = 1000;
+static const unsigned int MAX_FREE_TRANSACTION_CREATE_SIZE = 0;
 static const bool DEFAULT_WALLETBROADCAST = true;
 static const bool DEFAULT_DISABLE_WALLET = false;
 //! if set, all keys will be derived by using BIP32
