@@ -60,7 +60,7 @@ static const CAmount WALLET_INCREMENTAL_RELAY_FEE = COIN/10 * 5;
 //! target minimum change amount
 static const CAmount MIN_CHANGE = COIN;
 //! final minimum change amount after paying for fees
-static const CAmount MIN_FINAL_CHANGE = COIN/100;
+static const CAmount MIN_FINAL_CHANGE = COIN;
 //! Default for -spendzeroconfchange
 static const bool DEFAULT_SPEND_ZEROCONF_CHANGE = true;
 //! Default for -sendfreetransactions
