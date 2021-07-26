@@ -2567,7 +2567,11 @@ bool ActivateBestChain(CValidationState &state, const CChainParams& chainparams,
             uiInterface.NotifyBlockTip(fInitialDownload, pindexNewTip);
         }
     } while (pindexNewTip != pindexMostWork);
-    CheckBlockIndex(chainparams.GetConsensus(pindexNewTip->nHeight));
+    if (pindexNewTip != NULL) {
+        CheckBlockIndex(chainparams.GetConsensus(pindexNewTip->nHeight));
+    } else {
+        CheckBlockIndex(chainparams.GetConsensus(0));
+    }
 
     // Write changes periodically to disk, after relay.
     if (!FlushStateToDisk(state, FLUSH_STATE_PERIODIC)) {
