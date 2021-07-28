@@ -12,7 +12,7 @@
 #include "uint256.h"
 
 //rnicoll 7/2021: make dust limit configurable, which includes introducing a global default.
-static const unsigned int DEFAULT_DUST_THRESHOLD = COIN / 100;
+static const unsigned int DEFAULT_DUST_THRESHOLD = COIN;
 
 static const int SERIALIZE_TRANSACTION_NO_WITNESS = 0x40000000;
 
