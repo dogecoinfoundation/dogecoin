@@ -48,7 +48,8 @@ class MempoolPackagesTest(BitcoinTestFramework):
         vout = utxo[0]['vout']
         value = utxo[0]['amount']
 
-        fee = Decimal("0.0002")
+        # Dogecoin: Fee includes a dust penalty of 1 DOGE
+        fee = Decimal("1.01")
         # MAX_ANCESTORS transactions off a confirmed tx should be fine
         chain = []
         for _ in range(4):

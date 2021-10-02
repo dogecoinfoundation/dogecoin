@@ -20,8 +20,8 @@ BOOST_AUTO_TEST_CASE(BlockPolicyEstimates)
     CTxMemPool mpool(&feeEst);
     LOCK2(cs_main, mpool.cs);
     TestMemPoolEntryHelper entry;
-    CAmount basefee(2000);
-    CAmount deltaFee(100);
+    CAmount basefee(200000);
+    CAmount deltaFee(10000);
     std::vector<CAmount> feeV;
 
     // Populate vectors of increasing fees

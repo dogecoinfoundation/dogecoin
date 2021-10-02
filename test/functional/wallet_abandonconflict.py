@@ -44,13 +44,13 @@ class AbandonConflictTest(BitcoinTestFramework):
 
         self.sync_blocks()
         newbalance = self.nodes[0].getbalance()
-        assert balance - newbalance < Decimal("0.001")  #no more than fees lost
+        assert balance - newbalance < Decimal("0.01")  #no more than fees lost
         balance = newbalance
 
         # Disconnect nodes so node0's transactions don't get into node1's mempool
         self.disconnect_nodes(0, 1)
 
-        # Identify the 10btc outputs
+        # Identify the 10DOGE outputs
         nA = next(tx_out["vout"] for tx_out in self.nodes[0].gettransaction(txA)["details"] if tx_out["amount"] == Decimal("10"))
         nB = next(tx_out["vout"] for tx_out in self.nodes[0].gettransaction(txB)["details"] if tx_out["amount"] == Decimal("10"))
         nC = next(tx_out["vout"] for tx_out in self.nodes[0].gettransaction(txC)["details"] if tx_out["amount"] == Decimal("10"))
@@ -61,25 +61,25 @@ class AbandonConflictTest(BitcoinTestFramework):
         inputs.append({"txid": txB, "vout": nB})
         outputs = {}
 
-        outputs[self.nodes[0].getnewaddress()] = Decimal("14.99998")
+        outputs[self.nodes[0].getnewaddress()] = Decimal("14.998")
         outputs[self.nodes[1].getnewaddress()] = Decimal("5")
         signed = self.nodes[0].signrawtransactionwithwallet(self.nodes[0].createrawtransaction(inputs, outputs))
         txAB1 = self.nodes[0].sendrawtransaction(signed["hex"])
 
-        # Identify the 14.99998btc output
-        nAB = next(tx_out["vout"] for tx_out in self.nodes[0].gettransaction(txAB1)["details"] if tx_out["amount"] == Decimal("14.99998"))
+        # Identify the 14.998DOGE output
+        nAB = next(tx_out["vout"] for tx_out in self.nodes[0].gettransaction(txAB1)["details"] if tx_out["amount"] == Decimal("14.998"))
 
         #Create a child tx spending AB1 and C
         inputs = []
         inputs.append({"txid": txAB1, "vout": nAB})
         inputs.append({"txid": txC, "vout": nC})
         outputs = {}
-        outputs[self.nodes[0].getnewaddress()] = Decimal("24.9996")
+        outputs[self.nodes[0].getnewaddress()] = Decimal("24.96")
         signed2 = self.nodes[0].signrawtransactionwithwallet(self.nodes[0].createrawtransaction(inputs, outputs))
         txABC2 = self.nodes[0].sendrawtransaction(signed2["hex"])
 
         # Create a child tx spending ABC2
-        signed3_change = Decimal("24.999")
+        signed3_change = Decimal("24.9")
         inputs = [{"txid": txABC2, "vout": 0}]
         outputs = {self.nodes[0].getnewaddress(): signed3_change}
         signed3 = self.nodes[0].signrawtransactionwithwallet(self.nodes[0].createrawtransaction(inputs, outputs))
@@ -93,7 +93,7 @@ class AbandonConflictTest(BitcoinTestFramework):
 
         # Restart the node with a higher min relay fee so the parent tx is no longer in mempool
         # TODO: redo with eviction
-        self.restart_node(0, extra_args=["-minrelaytxfee=0.0001"])
+        self.restart_node(0, extra_args=["-minrelaytxfee=0.01"])
         assert self.nodes[0].getmempoolinfo()['loaded']
 
         # Verify txs no longer in either node's mempool
@@ -120,7 +120,7 @@ class AbandonConflictTest(BitcoinTestFramework):
         balance = newbalance
 
         # Verify that even with a low min relay fee, the tx is not reaccepted from wallet on startup once abandoned
-        self.restart_node(0, extra_args=["-minrelaytxfee=0.00001"])
+        self.restart_node(0, extra_args=["-minrelaytxfee=0.001"])
         assert self.nodes[0].getmempoolinfo()['loaded']
 
         assert_equal(len(self.nodes[0].getrawmempool()), 0)
@@ -131,21 +131,21 @@ class AbandonConflictTest(BitcoinTestFramework):
         # But its child tx remains abandoned
         self.nodes[0].sendrawtransaction(signed["hex"])
         newbalance = self.nodes[0].getbalance()
-        assert_equal(newbalance, balance - Decimal("20") + Decimal("14.99998"))
+        assert_equal(newbalance, balance - Decimal("20") + Decimal("14.998"))
         balance = newbalance
 
         # Send child tx again so it is unabandoned
         self.nodes[0].sendrawtransaction(signed2["hex"])
         newbalance = self.nodes[0].getbalance()
-        assert_equal(newbalance, balance - Decimal("10") - Decimal("14.99998") + Decimal("24.9996"))
+        assert_equal(newbalance, balance - Decimal("10") - Decimal("14.998") + Decimal("24.96"))
         balance = newbalance
 
         # Remove using high relay fee again
-        self.restart_node(0, extra_args=["-minrelaytxfee=0.0001"])
+        self.restart_node(0, extra_args=["-minrelaytxfee=0.01"])
         assert self.nodes[0].getmempoolinfo()['loaded']
         assert_equal(len(self.nodes[0].getrawmempool()), 0)
         newbalance = self.nodes[0].getbalance()
-        assert_equal(newbalance, balance - Decimal("24.9996"))
+        assert_equal(newbalance, balance - Decimal("24.96"))
         balance = newbalance
 
         # Create a double spend of AB1 by spending again from only A's 10 output
@@ -153,7 +153,7 @@ class AbandonConflictTest(BitcoinTestFramework):
         inputs = []
         inputs.append({"txid": txA, "vout": nA})
         outputs = {}
-        outputs[self.nodes[1].getnewaddress()] = Decimal("9.9999")
+        outputs[self.nodes[1].getnewaddress()] = Decimal("9")
         tx = self.nodes[0].createrawtransaction(inputs, outputs)
         signed = self.nodes[0].signrawtransactionwithwallet(tx)
         self.nodes[1].sendrawtransaction(signed["hex"])

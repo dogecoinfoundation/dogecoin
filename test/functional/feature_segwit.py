@@ -81,13 +81,13 @@ class SegWitTest(BitcoinTestFramework):
         self.sync_all()
 
     def success_mine(self, node, txid, sign, redeem_script=""):
-        send_to_witness(1, node, getutxo(txid), self.pubkey[0], False, Decimal("499999.998"), sign, redeem_script)
+        send_to_witness(1, node, getutxo(txid), self.pubkey[0], False, Decimal("499999.98"), sign, redeem_script)
         block = node.generate(1)
         assert_equal(len(node.getblock(block[0])["tx"]), 2)
         self.sync_blocks()
 
     def skip_mine(self, node, txid, sign, redeem_script=""):
-        send_to_witness(1, node, getutxo(txid), self.pubkey[0], False, Decimal("499999.998"), sign, redeem_script)
+        send_to_witness(1, node, getutxo(txid), self.pubkey[0], False, Decimal("499999.98"), sign, redeem_script)
         block = node.generate(1)
         assert_equal(len(node.getblock(block[0])["tx"]), 1)
         self.sync_blocks()
@@ -130,16 +130,17 @@ class SegWitTest(BitcoinTestFramework):
         for _ in range(5):
             for n in range(3):
                 for v in range(2):
-                    wit_ids[n][v].append(send_to_witness(v, self.nodes[0], find_spendable_utxo(self.nodes[0], 500000), self.pubkey[n], False, Decimal("499999.999")))
-                    p2sh_ids[n][v].append(send_to_witness(v, self.nodes[0], find_spendable_utxo(self.nodes[0], 500000), self.pubkey[n], True, Decimal("499999.999")))
+                    wit_ids[n][v].append(send_to_witness(v, self.nodes[0], find_spendable_utxo(self.nodes[0], 500000), self.pubkey[n], False, Decimal("499999.99")))
+                    p2sh_ids[n][v].append(send_to_witness(v, self.nodes[0], find_spendable_utxo(self.nodes[0], 500000), self.pubkey[n], True, Decimal("499999.99")))
 
         self.nodes[0].generate(1)  # block 303
         self.sync_blocks()
 
         # Make sure all nodes recognize the transactions as theirs
-        assert_equal(self.nodes[0].getbalance(), balance_presetup - 60 * 500000 + 20 * Decimal("499999.999") + 500000)
-        assert_equal(self.nodes[1].getbalance(), 20 * Decimal("499999.999"))
-        assert_equal(self.nodes[2].getbalance(), 20 * Decimal("499999.999"))
+        print(str(self.nodes[1].getbalance()))
+        assert_equal(self.nodes[0].getbalance(), balance_presetup - 60 * 500000 + 20 * Decimal("499999.99") + 500000)
+        assert_equal(self.nodes[1].getbalance(), 20 * Decimal("499999.99"))
+        assert_equal(self.nodes[2].getbalance(), 20 * Decimal("499999.99"))
 
         self.nodes[0].generate(260)  # block 563
         self.sync_blocks()

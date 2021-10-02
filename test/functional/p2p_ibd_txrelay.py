@@ -9,7 +9,7 @@ from decimal import Decimal
 from test_framework.messages import COIN
 from test_framework.test_framework import BitcoinTestFramework
 
-MAX_FEE_FILTER = Decimal(9170997) / COIN
+MAX_FEE_FILTER = Decimal(959717) / COIN
 NORMAL_FEE_FILTER = Decimal(100) / COIN
 
 

@@ -20,6 +20,7 @@ from test_framework.test_framework import BitcoinTestFramework
 from test_framework.util import (
     assert_equal,
     assert_raises_rpc_error,
+    count_bytes,
     find_vout_for_address,
     hex_str_to_bytes,
 )
@@ -386,7 +387,7 @@ class RawTransactionsTest(BitcoinTestFramework):
         self.nodes[0].generate(1)
         self.sync_all()
         vout = find_vout_for_address(self.nodes[1], txid, addr)
-        rawTx = self.nodes[1].createrawtransaction([{'txid': txid, 'vout': vout}], {self.nodes[1].getnewaddress(): 9.999})
+        rawTx = self.nodes[1].createrawtransaction([{'txid': txid, 'vout': vout}], {self.nodes[1].getnewaddress(): 9.99})
         rawTxSigned = self.nodes[1].signrawtransactionwithwallet(rawTx)
         txId = self.nodes[1].sendrawtransaction(rawTxSigned['hex'])
         self.nodes[0].generate(1)
@@ -462,42 +463,42 @@ class RawTransactionsTest(BitcoinTestFramework):
         self.log.info('sendrawtransaction/testmempoolaccept with maxfeerate')
 
         # Test a transaction with a small fee.
-        txId = self.nodes[0].sendtoaddress(self.nodes[2].getnewaddress(), 1.0)
+        txId = self.nodes[0].sendtoaddress(self.nodes[2].getnewaddress(), 10.0)
         rawTx = self.nodes[0].getrawtransaction(txId, True)
-        vout = next(o for o in rawTx['vout'] if o['value'] == Decimal('1.00000000'))
+        vout = next(o for o in rawTx['vout'] if o['value'] == Decimal('10.00000000'))
 
         self.sync_all()
         inputs = [{ "txid" : txId, "vout" : vout['n'] }]
-        # Fee 10,000 satoshis, (1 - (10000 sat * 0.00000001 BTC/sat)) = 0.9999
-        outputs = { self.nodes[0].getnewaddress() : Decimal("0.99990000") }
+        # Fee 1 DOGE, 10 - 1 = 9 DOGE
+        outputs = { self.nodes[0].getnewaddress() : Decimal("9.000") }
         rawTx = self.nodes[2].createrawtransaction(inputs, outputs)
         rawTxSigned = self.nodes[2].signrawtransactionwithwallet(rawTx)
         assert_equal(rawTxSigned['complete'], True)
-        # Fee 10,000 satoshis, ~100 b transaction, fee rate should land around 100 sat/byte = 0.00100000 BTC/kB
+        # Fee 1 DOGE, ~100 b transaction, fee rate should land around 10 DOGE/kB
         # Thus, testmempoolaccept should reject
-        testres = self.nodes[2].testmempoolaccept([rawTxSigned['hex']], 0.00001000)[0]
+        testres = self.nodes[2].testmempoolaccept([rawTxSigned['hex']], 1.00000000)[0]
         assert_equal(testres['allowed'], False)
         assert_equal(testres['reject-reason'], 'max-fee-exceeded')
         # and sendrawtransaction should throw
-        assert_raises_rpc_error(-25, 'Fee exceeds maximum configured by user (e.g. -maxtxfee, maxfeerate)', self.nodes[2].sendrawtransaction, rawTxSigned['hex'], 0.00001000)
+        assert_raises_rpc_error(-25, 'Fee exceeds maximum configured by user (e.g. -maxtxfee, maxfeerate)', self.nodes[2].sendrawtransaction, rawTxSigned['hex'], 1.00000000)
         # and the following calls should both succeed
         testres = self.nodes[2].testmempoolaccept(rawtxs=[rawTxSigned['hex']])[0]
         assert_equal(testres['allowed'], True)
         self.nodes[2].sendrawtransaction(hexstring=rawTxSigned['hex'])
 
         # Test a transaction with a large fee.
-        txId = self.nodes[0].sendtoaddress(self.nodes[2].getnewaddress(), 1.0)
+        txId = self.nodes[0].sendtoaddress(self.nodes[2].getnewaddress(), 100.0)
         rawTx = self.nodes[0].getrawtransaction(txId, True)
-        vout = next(o for o in rawTx['vout'] if o['value'] == Decimal('1.00000000'))
+        vout = next(o for o in rawTx['vout'] if o['value'] == Decimal('100.00000000'))
 
         self.sync_all()
         inputs = [{ "txid" : txId, "vout" : vout['n'] }]
-        # Fee 2,000,000 satoshis, (1 - (2000000 sat * 0.00000001 BTC/sat)) = 0.98
-        outputs = { self.nodes[0].getnewaddress() : Decimal("0.98000000") }
+        # Fee 2 DOGE
+        outputs = { self.nodes[0].getnewaddress() : Decimal("98.00000000") }
         rawTx = self.nodes[2].createrawtransaction(inputs, outputs)
         rawTxSigned = self.nodes[2].signrawtransactionwithwallet(rawTx)
         assert_equal(rawTxSigned['complete'], True)
-        # Fee 2,000,000 satoshis, ~100 b transaction, fee rate should land around 20,000 sat/byte = 0.20000000 BTC/kB
+        # Fee 2 DOGE, ~200 b transaction, fee rate should land around 11 DOGE/kB
         # Thus, testmempoolaccept should reject
         testres = self.nodes[2].testmempoolaccept([rawTxSigned['hex']])[0]
         assert_equal(testres['allowed'], False)
@@ -505,9 +506,9 @@ class RawTransactionsTest(BitcoinTestFramework):
         # and sendrawtransaction should throw
         assert_raises_rpc_error(-25, 'Fee exceeds maximum configured by user (e.g. -maxtxfee, maxfeerate)', self.nodes[2].sendrawtransaction, rawTxSigned['hex'])
         # and the following calls should both succeed
-        testres = self.nodes[2].testmempoolaccept(rawtxs=[rawTxSigned['hex']], maxfeerate='0.20000000')[0]
+        testres = self.nodes[2].testmempoolaccept(rawtxs=[rawTxSigned['hex']], maxfeerate='20.00000000')[0]
         assert_equal(testres['allowed'], True)
-        self.nodes[2].sendrawtransaction(hexstring=rawTxSigned['hex'], maxfeerate='0.20000000')
+        self.nodes[2].sendrawtransaction(hexstring=rawTxSigned['hex'], maxfeerate='20.00000000')
 
 
 if __name__ == '__main__':

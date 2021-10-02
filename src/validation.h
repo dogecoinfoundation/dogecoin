@@ -53,7 +53,11 @@ struct PrecomputedTransactionData;
 struct LockPoints;
 
 /** Default for -minrelaytxfee, minimum relay fee for transactions */
-static const unsigned int DEFAULT_MIN_RELAY_TX_FEE = 1000;
+// Dogecoin: Intentionally raising this to match block inclusion and wallet
+//           minimum. Need to reassess before 1.21 is released, but we should
+//           converge relay, block inclusion and wallet minimums for the
+//           release, whatever the right value is.
+static const unsigned int DEFAULT_MIN_RELAY_TX_FEE = COIN / 100;
 /** Default for -limitancestorcount, max number of in-mempool ancestors */
 static const unsigned int DEFAULT_ANCESTOR_LIMIT = 25;
 /** Default for -limitancestorsize, maximum kilobytes of tx + all in-mempool ancestors */

@@ -4,6 +4,7 @@
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
 """Test BIP68 implementation."""
 
+from decimal import Decimal
 import time
 
 from test_framework.blocktools import create_block, NORMAL_GBT_REQUEST_PARAMS, add_witness_commitment
@@ -41,7 +42,8 @@ class BIP68Test(BitcoinTestFramework):
         self.skip_if_no_wallet()
 
     def run_test(self):
-        self.relayfee = self.nodes[0].getnetworkinfo()["relayfee"]
+        # Dogecoin: Actual fee used is 10x relay fee
+        self.relayfee = self.nodes[0].getnetworkinfo()["relayfee"] * 10
 
         # Generate some coins
         self.nodes[0].generate(110)
@@ -130,7 +132,8 @@ class BIP68Test(BitcoinTestFramework):
             num_outputs = random.randint(1, max_outputs)
             outputs = {}
             for i in range(num_outputs):
-                outputs[addresses[i]] = random.randint(1, 20)*0.01
+                outputs[addresses[i]] = random.randint(1, 20)
+            print(str(outputs))
             self.nodes[0].sendmany("", outputs)
             self.nodes[0].generate(1)
 
@@ -214,7 +217,7 @@ class BIP68Test(BitcoinTestFramework):
         cur_height = self.nodes[0].getblockcount()
 
         # Create a mempool tx.
-        txid = self.nodes[0].sendtoaddress(self.nodes[0].getnewaddress(), 2)
+        txid = self.nodes[0].sendtoaddress(self.nodes[0].getnewaddress(), 20)
         tx1 = FromHex(CTransaction(), self.nodes[0].getrawtransaction(txid))
         tx1.rehash()
 

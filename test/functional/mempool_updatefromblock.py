@@ -22,7 +22,7 @@ class MempoolUpdateFromBlockTest(BitcoinTestFramework):
     def skip_test_if_missing_module(self):
         self.skip_if_no_wallet()
 
-    def transaction_graph_test(self, size, n_tx_to_mine=None, start_input_txid='', end_address='', fee=Decimal(0.00100000)):
+    def transaction_graph_test(self, size, n_tx_to_mine=None, start_input_txid='', end_address='', fee=Decimal(0.150000000)):
         """Create an acyclic tournament (a type of directed graph) of transactions and use it for testing.
 
         Keyword arguments:
@@ -71,12 +71,12 @@ class MempoolUpdateFromBlockTest(BitcoinTestFramework):
             if tx_count < size:
                 # Transaction tx[K] is an ancestor of each of subsequent transactions tx[K+1]..tx[N-1].
                 n_outputs = size - tx_count
-                output_value = ((inputs_value - fee) / Decimal(n_outputs)).quantize(Decimal('0.00000001'))
+                output_value = ((inputs_value - fee) / Decimal(n_outputs)).quantize(Decimal('0.0001'))
                 outputs = {}
                 for _ in range(n_outputs):
                     outputs[self.nodes[0].getnewaddress()] = output_value
             else:
-                output_value = (inputs_value - fee).quantize(Decimal('0.00000001'))
+                output_value = (inputs_value - fee).quantize(Decimal('0.0001'))
                 outputs = {end_address: output_value}
 
             self.log.debug('output_value={}'.format(output_value))

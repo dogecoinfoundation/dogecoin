@@ -83,7 +83,7 @@ def split_inputs(from_node, txins, txouts, initial_split=False):
     tx.vin.append(CTxIn(COutPoint(int(prevtxout["txid"], 16), prevtxout["vout"]), b""))
 
     half_change = satoshi_round(prevtxout["amount"] / 2)
-    rem_change = prevtxout["amount"] - half_change - Decimal("0.00001000")
+    rem_change = prevtxout["amount"] - half_change - Decimal("0.01000000")
     tx.vout.append(CTxOut(int(half_change * COIN), P2SH_1))
     tx.vout.append(CTxOut(int(rem_change * COIN), P2SH_2))
 
@@ -170,7 +170,7 @@ class EstimateFeeTest(BitcoinTestFramework):
         self.stop_nodes()
 
     def transact_and_mine(self, numblocks, mining_node):
-        min_fee = Decimal("0.00001")
+        min_fee = Decimal("0.01")
         # We will now mine numblocks blocks generating on average 100 transactions between each block
         # We shuffle our confirmed txout set before each set of transactions
         # small_txpuzzle_randfee will use the transactions that have inputs already in the chain when possible

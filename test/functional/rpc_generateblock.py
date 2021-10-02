@@ -76,10 +76,10 @@ class GenerateBlockTest(BitcoinTestFramework):
         assert_equal(node.gettransaction(txid)['hex'], signed_raw)
 
         self.log.info('Fail to generate block with out of order txs')
-        raw1 = node.createrawtransaction([{'txid':txid, 'vout':0}],[{address:0.9999}])
+        raw1 = node.createrawtransaction([{'txid':txid, 'vout':0}],[{address:0.99}])
         signed_raw1 = node.signrawtransactionwithwallet(raw1)['hex']
         txid1 = node.sendrawtransaction(signed_raw1)
-        raw2 = node.createrawtransaction([{'txid':txid1, 'vout':0}],[{address:0.999}])
+        raw2 = node.createrawtransaction([{'txid':txid1, 'vout':0}],[{address:0.9}])
         signed_raw2 = node.signrawtransactionwithwallet(raw2)['hex']
         assert_raises_rpc_error(-25, 'TestBlockValidity failed: bad-txns-inputs-missingorspent', node.generateblock, address, [signed_raw2, txid1])
 

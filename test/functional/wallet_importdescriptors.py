@@ -325,10 +325,10 @@ class ImportDescriptorsTest(BitcoinTestFramework):
                      address,
                      solvable=True,
                      ismine=True)
-        txid = w0.sendtoaddress(address, 499999.99995540)
+        txid = w0.sendtoaddress(address, 499999.9977)
         w0.generatetoaddress(6, w0.getnewaddress())
         self.sync_blocks()
-        tx = wpriv.createrawtransaction([{"txid": txid, "vout": 0}], {w0.getnewaddress(): 499999.999})
+        tx = wpriv.createrawtransaction([{"txid": txid, "vout": 0}], {w0.getnewaddress(): 499999.9})
         signed_tx = wpriv.signrawtransactionwithwallet(tx)
         w1.sendrawtransaction(signed_tx['hex'])
 
@@ -452,7 +452,7 @@ class ImportDescriptorsTest(BitcoinTestFramework):
         assert_equal(res[1]['success'], True)
         assert_equal(res[1]['warnings'][0], 'Not all private keys provided. Some wallet functionality may return unexpected errors')
 
-        rawtx = self.nodes[1].createrawtransaction([{'txid': txid, 'vout': vout}], {w0.getnewaddress(): 9.999})
+        rawtx = self.nodes[1].createrawtransaction([{'txid': txid, 'vout': vout}], {w0.getnewaddress(): 9.99})
         tx_signed_1 = wmulti_priv1.signrawtransactionwithwallet(rawtx)
         assert_equal(tx_signed_1['complete'], False)
         tx_signed_2 = wmulti_priv2.signrawtransactionwithwallet(tx_signed_1['hex'])

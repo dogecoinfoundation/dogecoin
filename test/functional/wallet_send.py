@@ -256,29 +256,30 @@ class WalletSendTest(BitcoinTestFramework):
         assert res["complete"]
 
         self.log.info("Test setting explicit fee rate")
-        res1 = self.test_send(from_wallet=w0, to_wallet=w1, amount=1, arg_fee_rate="1", add_to_wallet=False)
-        res2 = self.test_send(from_wallet=w0, to_wallet=w1, amount=1, fee_rate="1", add_to_wallet=False)
+        res1 = self.test_send(from_wallet=w0, to_wallet=w1, amount=1, arg_fee_rate="100000", add_to_wallet=False)
+        res2 = self.test_send(from_wallet=w0, to_wallet=w1, amount=1, fee_rate="100000", add_to_wallet=False)
         assert_equal(self.nodes[1].decodepsbt(res1["psbt"])["fee"], self.nodes[1].decodepsbt(res2["psbt"])["fee"])
 
-        res = self.test_send(from_wallet=w0, to_wallet=w1, amount=1, fee_rate=7, add_to_wallet=False)
+        res = self.test_send(from_wallet=w0, to_wallet=w1, amount=1, fee_rate=7000, add_to_wallet=False)
         fee = self.nodes[1].decodepsbt(res["psbt"])["fee"]
-        assert_fee_amount(fee, Decimal(len(res["hex"]) / 2), Decimal("0.00007"))
+        print(str(res))
+        assert_fee_amount(fee, Decimal(len(res["hex"]) / 2), Decimal("0.07"))
 
         # "unset" and None are treated the same for estimate_mode
-        res = self.test_send(from_wallet=w0, to_wallet=w1, amount=1, fee_rate=2, estimate_mode="unset", add_to_wallet=False)
+        res = self.test_send(from_wallet=w0, to_wallet=w1, amount=1, fee_rate=2000, estimate_mode="unset", add_to_wallet=False)
         fee = self.nodes[1].decodepsbt(res["psbt"])["fee"]
-        assert_fee_amount(fee, Decimal(len(res["hex"]) / 2), Decimal("0.00002"))
+        assert_fee_amount(fee, Decimal(len(res["hex"]) / 2), Decimal("0.02"))
 
-        res = self.test_send(from_wallet=w0, to_wallet=w1, amount=1, arg_fee_rate=4.531, add_to_wallet=False)
+        res = self.test_send(from_wallet=w0, to_wallet=w1, amount=1, arg_fee_rate=4531, add_to_wallet=False)
         fee = self.nodes[1].decodepsbt(res["psbt"])["fee"]
-        assert_fee_amount(fee, Decimal(len(res["hex"]) / 2), Decimal("0.00004531"))
+        assert_fee_amount(fee, Decimal(len(res["hex"]) / 2), Decimal("0.04531"))
 
-        res = self.test_send(from_wallet=w0, to_wallet=w1, amount=1, arg_fee_rate=3, add_to_wallet=False)
+        res = self.test_send(from_wallet=w0, to_wallet=w1, amount=1, arg_fee_rate=3000, add_to_wallet=False)
         fee = self.nodes[1].decodepsbt(res["psbt"])["fee"]
-        assert_fee_amount(fee, Decimal(len(res["hex"]) / 2), Decimal("0.00003"))
+        assert_fee_amount(fee, Decimal(len(res["hex"]) / 2), Decimal("0.03"))
 
         # Test that passing fee_rate as both an argument and an option raises.
-        self.test_send(from_wallet=w0, to_wallet=w1, amount=1, arg_fee_rate=1, fee_rate=1, add_to_wallet=False,
+        self.test_send(from_wallet=w0, to_wallet=w1, amount=1, arg_fee_rate=1000, fee_rate=1000, add_to_wallet=False,
                        expect_error=(-8, "Pass the fee_rate either as an argument, or in the options object, but not both"))
 
         assert_raises_rpc_error(-8, "Use fee_rate (koinu/vB) instead of feeRate", w0.send, {w1.getnewaddress(): 1}, 6, "conservative", 1, {"feeRate": 0.01})
@@ -303,15 +304,15 @@ class WalletSendTest(BitcoinTestFramework):
                     expect_error=(-3, "Expected type number for conf_target, got {}".format(k)))
 
         # Test setting explicit fee rate just below the minimum and at zero.
-        self.log.info("Explicit fee rate raises RPC error 'fee rate too low' if fee_rate of 0.99999999 is passed")
-        self.test_send(from_wallet=w0, to_wallet=w1, amount=1, fee_rate=0.99999999,
-            expect_error=(-4, "Fee rate (0.999 koinu/vB) is lower than the minimum fee rate setting (1.000 koinu/vB)"))
-        self.test_send(from_wallet=w0, to_wallet=w1, amount=1, arg_fee_rate=0.99999999,
-            expect_error=(-4, "Fee rate (0.999 koinu/vB) is lower than the minimum fee rate setting (1.000 koinu/vB)"))
+        self.log.info("Explicit fee rate raises RPC error 'fee rate too low' if fee_rate of 0.0999 is passed")
+        self.test_send(from_wallet=w0, to_wallet=w1, amount=1, fee_rate=999.9,
+            expect_error=(-4, "Fee rate (999.900 koinu/vB) is lower than the minimum fee rate setting (1000.000 koinu/vB)"))
+        self.test_send(from_wallet=w0, to_wallet=w1, amount=1, arg_fee_rate=999.9,
+            expect_error=(-4, "Fee rate (999.900 koinu/vB) is lower than the minimum fee rate setting (1000.000 koinu/vB)"))
         self.test_send(from_wallet=w0, to_wallet=w1, amount=1, fee_rate=0,
-            expect_error=(-4, "Fee rate (0.000 koinu/vB) is lower than the minimum fee rate setting (1.000 koinu/vB)"))
+            expect_error=(-4, "Fee rate (0.000 koinu/vB) is lower than the minimum fee rate setting (1000.000 koinu/vB)"))
         self.test_send(from_wallet=w0, to_wallet=w1, amount=1, arg_fee_rate=0,
-            expect_error=(-4, "Fee rate (0.000 koinu/vB) is lower than the minimum fee rate setting (1.000 koinu/vB)"))
+            expect_error=(-4, "Fee rate (0.000 koinu/vB) is lower than the minimum fee rate setting (1000.000 koinu/vB)"))
 
         # TODO: Return hex if fee rate is below -maxmempool
         # res = self.test_send(from_wallet=w0, to_wallet=w1, amount=1, conf_target=0.1, estimate_mode="koinu/b", add_to_wallet=False)
@@ -392,7 +393,7 @@ class WalletSendTest(BitcoinTestFramework):
         assert_equal(self.nodes[0].gettransaction(res["txid"])["bip125-replaceable"], "no")
 
         self.log.info("Subtract fee from output")
-        self.test_send(from_wallet=w0, to_wallet=w1, amount=1, subtract_fee_from_outputs=[0])
+        self.test_send(from_wallet=w0, to_wallet=w1, amount=2, subtract_fee_from_outputs=[0])
 
 
 if __name__ == '__main__':

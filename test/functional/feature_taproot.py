@@ -591,8 +591,8 @@ SIG_POP_BYTE = {"failure": {"sign": byte_popper(default_sign)}}
 SINGLE_SIG = {"inputs": [getter("sign")]}
 SIG_ADD_ZERO = {"failure": {"sign": zero_appender(default_sign)}}
 
-DUST_LIMIT = 600
-MIN_FEE = 50000
+DUST_LIMIT = 12000
+MIN_FEE = 1000000
 
 # === Actual test cases ===
 

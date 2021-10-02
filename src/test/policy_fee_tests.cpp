@@ -27,8 +27,8 @@ BOOST_AUTO_TEST_CASE(FeeRounder)
     BOOST_CHECK_EQUAL(fee_rounder.round(-0), 0);
     BOOST_CHECK_EQUAL(fee_rounder.round(-1), 0);
 
-    // check that MAX_MONEY rounds to 9170997
-    BOOST_CHECK_EQUAL(fee_rounder.round(MAX_MONEY), 9170997);
+    // check that MAX_MONEY rounds to 931091
+    BOOST_CHECK_EQUAL(fee_rounder.round(MAX_MONEY), 931091);
 }
 
 BOOST_AUTO_TEST_SUITE_END()
