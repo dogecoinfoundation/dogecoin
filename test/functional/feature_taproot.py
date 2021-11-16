@@ -591,8 +591,10 @@ SIG_POP_BYTE = {"failure": {"sign": byte_popper(default_sign)}}
 SINGLE_SIG = {"inputs": [getter("sign")]}
 SIG_ADD_ZERO = {"failure": {"sign": zero_appender(default_sign)}}
 
-DUST_LIMIT = 12000
-MIN_FEE = 1000000
+# Dogecoin: I have just scaled these up, and confirmed the test passes, we should
+#           re-evaluate them if enabling Taproot to verify the test is 100% valid.
+DUST_LIMIT = 1200000
+MIN_FEE = 10000000
 
 # === Actual test cases ===
 
