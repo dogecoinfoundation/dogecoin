@@ -157,36 +157,36 @@ class KeyPoolTest(BitcoinTestFramework):
         assert_equal(res[0]['success'], True)
         w1.walletpassphrase('test', 100)
 
-        res = w1.sendtoaddress(address=address, amount=0.010000)
+        res = w1.sendtoaddress(address=address, amount=0.10000)
         nodes[0].generate(1)
         destination = addr.pop()
 
         # Using a fee rate (100 koinu / byte) well above the minimum relay rate
         # creating a 50,000 koinu transaction with change should not be possible
-        assert_raises_rpc_error(-4, "Transaction needs a change address, but we can't generate it. Please call keypoolrefill first.", w2.walletcreatefundedpsbt, inputs=[], outputs=[{addr.pop(): 0.005000}], options={"subtractFeeFromOutputs": [0], "feeRate": 0.010})
+        assert_raises_rpc_error(-4, "Transaction needs a change address, but we can't generate it. Please call keypoolrefill first.", w2.walletcreatefundedpsbt, inputs=[], outputs=[{addr.pop(): 0.05000}], options={"subtractFeeFromOutputs": [0], "feeRate": 0.10})
 
         # creating a 100,000 koinu transaction without change, with a manual input, should still be possible
-        res = w2.walletcreatefundedpsbt(inputs=w2.listunspent(), outputs=[{destination: 0.010000}], options={"subtractFeeFromOutputs": [0], "feeRate": 0.010})
+        res = w2.walletcreatefundedpsbt(inputs=w2.listunspent(), outputs=[{destination: 0.10000}], options={"subtractFeeFromOutputs": [0], "feeRate": 0.10})
         assert_equal("psbt" in res, True)
 
         # creating a 100,000 koinu transaction without change should still be possible
-        res = w2.walletcreatefundedpsbt(inputs=[], outputs=[{destination: 0.010000}], options={"subtractFeeFromOutputs": [0], "feeRate": 0.010})
+        res = w2.walletcreatefundedpsbt(inputs=[], outputs=[{destination: 0.10000}], options={"subtractFeeFromOutputs": [0], "feeRate": 0.10})
         assert_equal("psbt" in res, True)
         # should work without subtractFeeFromOutputs if the exact fee is subtracted from the amount
-        res = w2.walletcreatefundedpsbt(inputs=[], outputs=[{destination: 0.008900}], options={"feeRate": 0.010})
+        res = w2.walletcreatefundedpsbt(inputs=[], outputs=[{destination: 0.08900}], options={"feeRate": 0.10})
         assert_equal("psbt" in res, True)
 
         # dust change should be removed
-        res = w2.walletcreatefundedpsbt(inputs=[], outputs=[{destination: 0.008800}], options={"feeRate": 0.010})
+        res = w2.walletcreatefundedpsbt(inputs=[], outputs=[{destination: 0.08800}], options={"feeRate": 0.10})
         assert_equal("psbt" in res, True)
 
         # create a transaction without change at the maximum fee rate, such that the output is still spendable:
-        res = w2.walletcreatefundedpsbt(inputs=[], outputs=[{destination: 0.010000}], options={"subtractFeeFromOutputs": [0], "feeRate": 0.08824})
+        res = w2.walletcreatefundedpsbt(inputs=[], outputs=[{destination: 0.10000}], options={"subtractFeeFromOutputs": [0], "feeRate": 0.8824})
         assert_equal("psbt" in res, True)
-        assert_equal(res["fee"], Decimal("0.00970640"))
+        assert_equal(res["fee"], Decimal("0.0970640"))
 
         # creating a 100,000 koinu transaction with a manual change address should be possible
-        res = w2.walletcreatefundedpsbt(inputs=[], outputs=[{destination: 0.010000}], options={"subtractFeeFromOutputs": [0], "feeRate": 0.010, "changeAddress": addr.pop()})
+        res = w2.walletcreatefundedpsbt(inputs=[], outputs=[{destination: 0.10000}], options={"subtractFeeFromOutputs": [0], "feeRate": 0.10, "changeAddress": addr.pop()})
         assert_equal("psbt" in res, True)
 
 
