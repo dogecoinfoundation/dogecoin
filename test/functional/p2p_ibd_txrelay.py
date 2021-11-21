@@ -9,7 +9,7 @@ from decimal import Decimal
 from test_framework.messages import COIN
 from test_framework.test_framework import BitcoinTestFramework
 
-MAX_FEE_FILTER = Decimal(959717) / COIN
+MAX_FEE_FILTER = Decimal(974358) / COIN
 NORMAL_FEE_FILTER = Decimal(100) / COIN
 
 
@@ -26,6 +26,7 @@ class P2PIBDTxRelayTest(BitcoinTestFramework):
         self.log.info("Check that nodes set minfilter to MAX_MONEY while still in IBD")
         for node in self.nodes:
             assert node.getblockchaininfo()['initialblockdownload']
+            print(str(node.getpeerinfo()))
             self.wait_until(lambda: all(peer['minfeefilter'] == MAX_FEE_FILTER for peer in node.getpeerinfo()))
 
         # Come out of IBD by generating a block
