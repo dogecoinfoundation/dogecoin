@@ -25,6 +25,8 @@ bool DecodeAuxPow(CAuxPow& auxpow, const std::string& strHexAuxPow);
 uint256 ParseHashUV(const UniValue& v, const std::string& strName);
 uint256 ParseHashStr(const std::string&, const std::string& strName);
 std::vector<unsigned char> ParseHexUV(const UniValue& v, const std::string& strName);
+unsigned int ParseScriptFlags(std::string strFlags);
+std::string FormatScriptFlags(unsigned int flags);
 
 // core_write.cpp
 std::string FormatScript(const CScript& script);

@@ -24,9 +24,14 @@
 #include "undo.h"
 #include "util.h"
 #include "utilstrencodings.h"
+#include "utiltime.h"
 #include "hash.h"
+#include "script/standard.h"
 
 #include <stdint.h>
+#include <algorithm>
+#include <iomanip>
+#include <sstream>
 
 #include <univalue.h>
 
@@ -1265,6 +1270,245 @@ UniValue getblockchaininfo(const JSONRPCRequest& request)
     return obj;
 }
 
+UniValue getdashboardmetrics(const JSONRPCRequest& request)
+{
+    if (request.fHelp || request.params.size() > 1)
+        throw runtime_error(
+            "getdashboardmetrics ( window_blocks )\n"
+            "Returns metrics formatted for libdogecoin dashboard integration.\n"
+            "\nArguments:\n"
+            "1. window_blocks    (numeric, optional, default=100) Number of recent blocks for rolling stats (1-5000)\n"
+            "\nResult:\n"
+            "{\n"
+            "  \"chain_tip_height\": x,                (numeric) current chain height\n"
+            "  \"chain_tip_difficulty\": x,            (numeric) current difficulty\n"
+            "  \"chain_tip_time\": \"xxxx\",           (string) chain tip time in ISO-8601 format\n"
+            "  \"chain_tip_bits_hex\": \"0xxxxx\",     (string) compact difficulty bits in hex\n"
+            "  \"mempool_tx_count\": x,                (numeric) count of transactions in mempool\n"
+            "  \"mempool_total_bytes\": x,             (numeric) total mempool size in bytes\n"
+            "  \"mempool_p2pkh_count\": x,             (numeric) P2PKH outputs in mempool\n"
+            "  \"mempool_p2sh_count\": x,              (numeric) P2SH outputs in mempool\n"
+            "  \"mempool_multisig_count\": x,          (numeric) multisig outputs in mempool\n"
+            "  \"mempool_op_return_count\": x,         (numeric) OP_RETURN outputs in mempool\n"
+            "  \"mempool_nonstandard_count\": x,       (numeric) nonstandard outputs in mempool\n"
+            "  \"mempool_output_count\": x,            (numeric) total outputs in mempool\n"
+            "  \"stats_blocks\": x,                    (numeric) blocks analyzed in rolling window\n"
+            "  \"stats_transactions\": x,              (numeric) total transactions in rolling window\n"
+            "  \"stats_tps\": x,                       (numeric) estimated transactions per second\n"
+            "  \"stats_volume\": x,                    (numeric) sum of output values in DOGE\n"
+            "  \"stats_outputs\": x,                   (numeric) total outputs in rolling window\n"
+            "  \"stats_bytes\": x,                     (numeric) total block bytes in rolling window\n"
+            "  \"stats_median_fee_per_block\": x,      (numeric) median fee per block in DOGE\n"
+            "  \"stats_avg_fee_per_block\": x,         (numeric) average fee per block in DOGE\n"
+            "  \"uptime_sec\": x                       (numeric) node uptime in seconds\n"
+            "}\n"
+            "\nExamples:\n"
+            + HelpExampleCli("getdashboardmetrics", "")
+            + HelpExampleCli("getdashboardmetrics", "250")
+            + HelpExampleRpc("getdashboardmetrics", "250")
+        );
+
+    int stats_window = 100;
+    if (request.params.size() == 1) {
+        stats_window = request.params[0].get_int();
+        if (stats_window < 1 || stats_window > 5000) {
+            throw JSONRPCError(RPC_INVALID_PARAMETER, "window_blocks must be between 1 and 5000");
+        }
+    }
+
+    LOCK(cs_main);
+
+    UniValue result(UniValue::VOBJ);
+    
+    // Chain tip metrics
+    CBlockIndex* tip = chainActive.Tip();
+    if (!tip)
+        throw JSONRPCError(RPC_INTERNAL_ERROR, "Chain tip not available");
+    
+    result.pushKV("chain_tip_height", (int64_t)chainActive.Height());
+    result.pushKV("chain_tip_difficulty", GetDifficulty());
+    result.pushKV("chain_tip_time", DateTimeStrFormat("%Y-%m-%dT%H:%M:%S", tip->GetBlockTime()));
+    result.pushKV("chain_tip_blockhash", tip->GetBlockHash().GetHex());
+    std::string chain_tip_coinbase_txid;
+    {
+        CBlock tip_block;
+        if (ReadBlockFromDisk(tip_block, tip, Params().GetConsensus(tip->nHeight)) && !tip_block.vtx.empty()) {
+            chain_tip_coinbase_txid = tip_block.vtx[0]->GetHash().GetHex();
+        }
+    }
+    result.pushKV("chain_tip_coinbase_txid", chain_tip_coinbase_txid);
+    
+    std::ostringstream bitsHex;
+    bitsHex << "0x" << std::hex << tip->nBits;
+    result.pushKV("chain_tip_bits_hex", bitsHex.str());
+    
+    // Mempool metrics
+    {
+        LOCK(mempool.cs);
+        
+        result.pushKV("mempool_tx_count", (int64_t)mempool.size());
+        result.pushKV("mempool_total_bytes", (int64_t)mempool.DynamicMemoryUsage());
+        
+        // Count output types in mempool
+        int64_t p2pkh_count = 0;
+        int64_t p2sh_count = 0;
+        int64_t multisig_count = 0;
+        int64_t op_return_count = 0;
+        int64_t nonstandard_count = 0;
+        int64_t total_vouts = 0;
+        int64_t latest_mempool_time = 0;
+        std::string latest_mempool_txid;
+        
+        for (const CTxMemPoolEntry& e : mempool.mapTx) {
+            const CTransaction& tx = e.GetTx();
+            if (e.GetTime() > latest_mempool_time) {
+                latest_mempool_time = e.GetTime();
+                latest_mempool_txid = tx.GetHash().GetHex();
+            }
+            for (const CTxOut& txout : tx.vout) {
+                total_vouts++;
+                
+                txnouttype type;
+                std::vector<std::vector<unsigned char>> vSolutions;
+                if (Solver(txout.scriptPubKey, type, vSolutions)) {
+                    switch (type) {
+                        case TX_PUBKEYHASH:
+                            p2pkh_count++;
+                            break;
+                        case TX_SCRIPTHASH:
+                            p2sh_count++;
+                            break;
+                        case TX_MULTISIG:
+                            multisig_count++;
+                            break;
+                        case TX_NULL_DATA:
+                            op_return_count++;
+                            break;
+                        case TX_NONSTANDARD:
+                            nonstandard_count++;
+                            break;
+                        default:
+                            // Other types (TX_PUBKEY, TX_WITNESS_*) are not counted separately
+                            break;
+                    }
+                } else {
+                    nonstandard_count++;
+                }
+            }
+        }
+        
+        result.pushKV("mempool_p2pkh_count", (int64_t)p2pkh_count);
+        result.pushKV("mempool_p2sh_count", (int64_t)p2sh_count);
+        result.pushKV("mempool_multisig_count", (int64_t)multisig_count);
+        result.pushKV("mempool_op_return_count", (int64_t)op_return_count);
+        result.pushKV("mempool_nonstandard_count", (int64_t)nonstandard_count);
+        result.pushKV("mempool_output_count", (int64_t)total_vouts);
+        result.pushKV("mempool_latest_txid", latest_mempool_txid);
+    }
+    
+    // Rolling statistics (last N blocks)
+    const int STATS_WINDOW = stats_window;
+    int blocks_analyzed = 0;
+    int64_t total_transactions = 0;
+    int64_t total_outputs = 0;
+    int64_t total_bytes = 0;
+    CAmount total_volume = 0;
+    std::vector<CAmount> fees_per_block;
+    int64_t total_time_span = 0;
+    
+    CBlockIndex* pindex = tip;
+    CBlockIndex* pindexStart = pindex;
+    
+    for (int i = 0; i < STATS_WINDOW && pindex; i++) {
+        CBlock block;
+        if (ReadBlockFromDisk(block, pindex, Params().GetConsensus(pindex->nHeight))) {
+            blocks_analyzed++;
+            total_transactions += block.vtx.size();
+            total_bytes += ::GetSerializeSize(block, SER_NETWORK, PROTOCOL_VERSION);
+            
+            // Calculate block fee from coinbase
+            CAmount block_fee = 0;
+            if (!block.vtx.empty() && block.vtx[0]->IsCoinBase()) {
+                CAmount coinbase_out = 0;
+                for (const CTxOut& txout : block.vtx[0]->vout) {
+                    coinbase_out += txout.nValue;
+                }
+                // Block reward at this height
+                uint256 prevHash = pindex->pprev ? pindex->pprev->GetBlockHash() : uint256();
+                CAmount block_subsidy = GetDogecoinBlockSubsidy(pindex->nHeight, Params().GetConsensus(pindex->nHeight), prevHash);
+                // Fee is coinbase output minus subsidy
+                if (coinbase_out > block_subsidy) {
+                    block_fee = coinbase_out - block_subsidy;
+                }
+            }
+            fees_per_block.push_back(block_fee);
+            
+            // Count outputs and volume
+            for (const auto& tx : block.vtx) {
+                for (const CTxOut& txout : tx->vout) {
+                    total_outputs++;
+                    total_volume += txout.nValue;
+                }
+            }
+            
+            pindexStart = pindex;
+        }
+        
+        pindex = pindex->pprev;
+    }
+    
+    if (blocks_analyzed > 0) {
+        if (pindexStart && tip) {
+            total_time_span = tip->GetBlockTime() - pindexStart->GetBlockTime();
+        }
+    }
+    
+    result.pushKV("stats_blocks", (int64_t)blocks_analyzed);
+    result.pushKV("stats_transactions", (int64_t)total_transactions);
+    
+    double tps = 0.0;
+    if (total_time_span > 0) {
+        tps = (double)total_transactions / (double)total_time_span;
+    }
+    result.pushKV("stats_tps", tps);
+    
+    result.pushKV("stats_volume", ValueFromAmount(total_volume));
+    result.pushKV("stats_outputs", (int64_t)total_outputs);
+    result.pushKV("stats_bytes", (int64_t)total_bytes);
+    
+    // Calculate median and average fees
+    UniValue median_fee = 0.0;
+    UniValue avg_fee = 0.0;
+    
+    if (!fees_per_block.empty()) {
+        std::vector<CAmount> sorted_fees = fees_per_block;
+        std::sort(sorted_fees.begin(), sorted_fees.end());
+        
+        size_t mid = sorted_fees.size() / 2;
+        if (sorted_fees.size() % 2 == 0) {
+            median_fee = ValueFromAmount((sorted_fees[mid - 1] + sorted_fees[mid]) / 2);
+        } else {
+            median_fee = ValueFromAmount(sorted_fees[mid]);
+        }
+        
+        CAmount total_fees = 0;
+        for (CAmount fee : fees_per_block) {
+            total_fees += fee;
+        }
+        avg_fee = ValueFromAmount(total_fees / (CAmount)fees_per_block.size());
+    }
+    
+    result.pushKV("stats_median_fee_per_block", median_fee);
+    result.pushKV("stats_avg_fee_per_block", avg_fee);
+    result.pushKV("stats_reference_txid", chain_tip_coinbase_txid);
+    result.pushKV("stats_reference_blockhash", tip->GetBlockHash().GetHex());
+    
+    // Uptime
+    result.pushKV("uptime_sec", (int64_t)(GetTime() - GetStartupTime()));
+    
+    return result;
+}
+
 /** Comparison function for sorting the getchaintips heads.  */
 struct CompareBlocksByHeight
 {
@@ -1858,6 +2102,7 @@ static const CRPCCommand commands[] =
 { //  category              name                      actor (function)         okSafe argNames
   //  --------------------- ------------------------  -----------------------  ------ ----------
     { "blockchain",         "getblockchaininfo",      &getblockchaininfo,      true,  {} },
+    { "blockchain",         "getdashboardmetrics",    &getdashboardmetrics,    true,  {"window_blocks"} },
     { "blockchain",         "getblockstats",          &getblockstats,          true,  {"hash", "stats"} },
     { "blockchain",         "getbestblockhash",       &getbestblockhash,       true,  {} },
     { "blockchain",         "getblockcount",          &getblockcount,          true,  {} },

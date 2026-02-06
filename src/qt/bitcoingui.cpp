@@ -93,6 +93,7 @@ BitcoinGUI::BitcoinGUI(const PlatformStyle *_platformStyle, const NetworkStyle *
     appMenuBar(0),
     overviewAction(0),
     historyAction(0),
+    dashb0rdAction(0),
     quitAction(0),
     sendCoinsAction(0),
     sendCoinsMenuAction(0),
@@ -327,6 +328,13 @@ void BitcoinGUI::createActions()
     historyAction->setShortcut(QKeySequence(Qt::ALT + Qt::Key_4));
     tabGroup->addAction(historyAction);
 
+    dashb0rdAction = new QAction(platformStyle->SingleColorIcon(":/icons/about"), tr("&Dashb0rd"), this);
+    dashb0rdAction->setStatusTip(tr("View dashboard metrics"));
+    dashb0rdAction->setToolTip(dashb0rdAction->statusTip());
+    dashb0rdAction->setCheckable(true);
+    dashb0rdAction->setShortcut(QKeySequence(Qt::ALT + Qt::Key_5));
+    tabGroup->addAction(dashb0rdAction);
+
 #ifdef ENABLE_WALLET
     // These showNormalIfMinimized are needed because Send Coins and Receive Coins
     // can be triggered from the tray menu, and need to show the GUI to be useful.
@@ -342,6 +350,8 @@ void BitcoinGUI::createActions()
     connect(receiveCoinsMenuAction, SIGNAL(triggered()), this, SLOT(gotoReceiveCoinsPage()));
     connect(historyAction, SIGNAL(triggered()), this, SLOT(showNormalIfMinimized()));
     connect(historyAction, SIGNAL(triggered()), this, SLOT(gotoHistoryPage()));
+    connect(dashb0rdAction, SIGNAL(triggered()), this, SLOT(showNormalIfMinimized()));
+    connect(dashb0rdAction, SIGNAL(triggered()), this, SLOT(gotoDashb0rdPage()));
 #endif // ENABLE_WALLET
 
     quitAction = new QAction(platformStyle->TextColorIcon(":/icons/quit"), tr("E&xit"), this);
@@ -484,6 +494,7 @@ void BitcoinGUI::createToolBars()
         toolbar->addAction(sendCoinsAction);
         toolbar->addAction(receiveCoinsAction);
         toolbar->addAction(historyAction);
+        toolbar->addAction(dashb0rdAction);
         overviewAction->setChecked(true);
     }
 }
@@ -712,6 +723,12 @@ void BitcoinGUI::gotoHistoryPage()
 {
     historyAction->setChecked(true);
     if (walletFrame) walletFrame->gotoHistoryPage();
+}
+
+void BitcoinGUI::gotoDashb0rdPage()
+{
+    dashb0rdAction->setChecked(true);
+    if (walletFrame) walletFrame->gotoDashb0rdPage();
 }
 
 void BitcoinGUI::gotoReceiveCoinsPage()
