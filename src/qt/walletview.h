@@ -16,6 +16,7 @@
 
 class BitcoinGUI;
 class ClientModel;
+class Dashb0rd;
 class OverviewPage;
 class PlatformStyle;
 class ReceiveCoinsDialog;
@@ -72,6 +73,7 @@ private:
     QWidget *transactionsPage;
     ReceiveCoinsDialog *receiveCoinsPage;
     SendCoinsDialog *sendCoinsPage;
+    Dashb0rd *dashb0rdPage;
     AddressBookPage *usedSendingAddressesPage;
     AddressBookPage *usedReceivingAddressesPage;
     ImportKeysDialog *importKeysDialog;
@@ -101,6 +103,8 @@ public Q_SLOTS:
     void gotoReceiveCoinsPage();
     /** Switch to send coins page */
     void gotoSendCoinsPage(QString addr = "");
+    /** Switch to dashboard page */
+    void gotoDashb0rdPage();
 
     /** Show Sign/Verify Message dialog and switch to sign message tab */
     void gotoSignMessageTab(QString addr = "");
