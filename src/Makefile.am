@@ -45,6 +45,9 @@ endif
 if ENABLE_WALLET
 LIBDOGECOIN_WALLET=libdogecoin_wallet.a
 endif
+if ENABLE_RACCOON_G
+LIBDOGECOIN_RACCOON_G=raccoon_g/libdogecoin_raccoon_g.a
+endif
 if USE_ARMV82
 crypto_libdogecoin_crypto_armv82_a_CXXFLAGS = $(ARMV82_CXXFLAGS)
 LIBDOGECOIN_CRYPTO_ARMV82=crypto/libdogecoin_crypto_armv82.a
@@ -66,7 +69,8 @@ EXTRA_LIBRARIES += \
   $(LIBDOGECOIN_SERVER) \
   $(LIBDOGECOIN_CLI) \
   $(LIBDOGECOIN_WALLET) \
-  $(LIBDOGECOIN_ZMQ)
+  $(LIBDOGECOIN_ZMQ) \
+  $(LIBDOGECOIN_RACCOON_G)
 
 lib_LTLIBRARIES = $(LIBDOGECOINCONSENSUS)
 
@@ -326,6 +330,31 @@ crypto_libdogecoin_crypto_avx2_a_CPPFLAGS += -DENABLE_AVX2
 endif
 crypto_libdogecoin_crypto_avx2_a_SOURCES = crypto/sha256_avx2.cpp
 
+# raccoon_g: in-tree Raccoon-G-44 C port (vendored verbatim from
+# edtubbs/libdogecoin@0.1.5-dev-pqc-carrier). The dogecoin/ subdirectory
+# of src/raccoon_g/ holds a thin compatibility shim mapping the upstream
+# <dogecoin/...> includes onto this tree's existing crypto/random/mem
+# primitives.
+if ENABLE_RACCOON_G
+raccoon_g_libdogecoin_raccoon_g_a_CFLAGS = $(AM_CFLAGS) $(PIC_FLAGS)
+raccoon_g_libdogecoin_raccoon_g_a_CXXFLAGS = $(AM_CXXFLAGS) $(PIE_FLAGS)
+raccoon_g_libdogecoin_raccoon_g_a_CPPFLAGS = $(AM_CPPFLAGS) $(BITCOIN_INCLUDES) -I$(srcdir)/raccoon_g
+raccoon_g_libdogecoin_raccoon_g_a_SOURCES = \
+  raccoon_g/dogecoin/dogecoin.h \
+  raccoon_g/dogecoin/mem.h \
+  raccoon_g/dogecoin/ctaes.h \
+  raccoon_g/dogecoin/sha2.h \
+  raccoon_g/dogecoin/random.h \
+  raccoon_g/dogecoin_compat.cpp \
+  raccoon_g/polyr.h raccoon_g/polyr.c \
+  raccoon_g/ntt.h raccoon_g/ntt.c \
+  raccoon_g/gaussian.h raccoon_g/gaussian.c \
+  raccoon_g/shake256.h raccoon_g/shake256.c \
+  raccoon_g/keygen_kdf.h raccoon_g/keygen_kdf.c \
+  raccoon_g/thrc.h raccoon_g/thrc.c \
+  raccoon_g/raccoong.h raccoon_g/raccoong.c
+endif
+
 # consensus: shared between all executables that validate any consensus rules.
 libdogecoin_consensus_a_CPPFLAGS = $(AM_CPPFLAGS) $(BITCOIN_INCLUDES)
 libdogecoin_consensus_a_CXXFLAGS = $(AM_CXXFLAGS) $(PIE_FLAGS)
@@ -365,6 +394,9 @@ libdogecoin_consensus_a_SOURCES = \
 
 # common: shared between bitcoind, and bitcoin-qt and non-server tools
 libdogecoin_common_a_CPPFLAGS = $(AM_CPPFLAGS) $(BITCOIN_INCLUDES)
+if ENABLE_RACCOON_G
+libdogecoin_common_a_CPPFLAGS += -I$(srcdir)/raccoon_g
+endif
 libdogecoin_common_a_CXXFLAGS = $(AM_CXXFLAGS) $(PIE_FLAGS)
 libdogecoin_common_a_SOURCES = \
   amount.cpp \
@@ -461,6 +493,9 @@ dogecoind_LDADD += $(BOOST_LIBS) $(BDB_LIBS)
 if ENABLE_LIBOQS
 dogecoind_LDADD += $(LIBOQS_LIBS)
 endif
+if ENABLE_RACCOON_G
+dogecoind_LDADD += $(LIBDOGECOIN_RACCOON_G) $(RACCOON_G_LIBS)
+endif
 dogecoind_LDADD += $(SSL_LIBS) $(CRYPTO_LIBS) $(MINIUPNPC_LIBS) $(EVENT_PTHREADS_LIBS) $(EVENT_LIBS) $(ZMQ_LIBS)
 
 # bitcoin-cli binary #
@@ -507,6 +542,9 @@ dogecoin_tx_LDADD = \
 dogecoin_tx_LDADD += $(BOOST_LIBS)
 if ENABLE_LIBOQS
 dogecoin_tx_LDADD += $(LIBOQS_LIBS)
+endif
+if ENABLE_RACCOON_G
+dogecoin_tx_LDADD += $(LIBDOGECOIN_RACCOON_G) $(RACCOON_G_LIBS)
 endif
 dogecoin_tx_LDADD += $(CRYPTO_LIBS)
 #

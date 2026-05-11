@@ -416,7 +416,8 @@ QString TransactionDesc::toHTML(CWallet *wallet, CWalletTx &wtx, TransactionReco
                                       : "<span style=\"color:red;\">" + tr("NO — MISMATCH") + "</span>") + "<br>";
                     }
 
-                    // Perform OQS_SIG_verify() cryptographic verification
+                    // Perform PQ cryptographic verification (liboqs OQS_SIG_verify
+                    // for Falcon/Dilithium, in-tree raccoong_verify for Raccoon-G-44).
                     // Recompute sighash32(TX_BASE) from TX_C per the BIP spec
                     // (strip OP_RETURN + carriers, restore carrier cost to vout[0])
                     bool cryptoVerified = false;
@@ -479,7 +480,7 @@ QString TransactionDesc::toHTML(CWallet *wallet, CWalletTx &wtx, TransactionReco
                         } else {
                             oqsStatus = "<span style=\"color:red;\">" + tr("FAILED") + "</span>";
                         }
-                        strHTML += "<b>" + tr("OQS_SIG_verify() cryptographic check") + ":</b> " + oqsStatus + "<br>";
+                        strHTML += "<b>" + QString::fromLatin1(PQCGetVerifierName(pqcType)) + " " + tr("cryptographic check") + ":</b> " + oqsStatus + "<br>";
                     }
                     if (usedStoredFallback) {
                         strHTML += "<b><span style=\"color:#aa6600;\">" + tr("Verification message source") + ":</span></b> "
@@ -508,7 +509,7 @@ QString TransactionDesc::toHTML(CWallet *wallet, CWalletTx &wtx, TransactionReco
                     } else {
                         QString failReason;
                         if (!commitmentMatch) failReason += tr("commitment mismatch") + "; ";
-                        if (!cryptoVerified) failReason += tr("OQS_SIG_verify() failed") + "; ";
+                        if (!cryptoVerified) failReason += QString::fromLatin1(PQCGetVerifierName(pqcType)) + " " + tr("failed") + "; ";
                         strHTML += "<b>" + tr("PQC signature validation") + ":</b> <span style=\"color:red;\">"
                                   + tr("FAILED — %1").arg(failReason) + "</span><br>";
                     }
@@ -629,7 +630,8 @@ QString TransactionDesc::toHTML(CWallet *wallet, CWalletTx &wtx, TransactionReco
                 }
             }
 
-            // Perform OQS_SIG_verify() cryptographic verification
+            // Perform PQ cryptographic verification (liboqs OQS_SIG_verify
+            // for Falcon/Dilithium, in-tree raccoong_verify for Raccoon-G-44).
             // Recompute sighash32(TX_BASE) from TX_C per the BIP spec
             bool cryptoVerified = false;
             bool usedStoredFallback = false;
@@ -714,7 +716,7 @@ QString TransactionDesc::toHTML(CWallet *wallet, CWalletTx &wtx, TransactionReco
                 } else {
                     oqsStatus = "<span style=\"color:red;\">" + tr("FAILED") + "</span>";
                 }
-                strHTML += "<b>" + tr("OQS_SIG_verify() cryptographic check") + ":</b> " + oqsStatus + "<br>";
+                strHTML += "<b>" + QString::fromLatin1(PQCGetVerifierName(txrType)) + " " + tr("cryptographic check") + ":</b> " + oqsStatus + "<br>";
             }
             if (usedStoredFallback) {
                 strHTML += "<b><span style=\"color:#aa6600;\">" + tr("Verification message source") + ":</span></b> "
@@ -744,7 +746,7 @@ QString TransactionDesc::toHTML(CWallet *wallet, CWalletTx &wtx, TransactionReco
                 QString failReason;
                 if (!foundCommitment) failReason += tr("TX_C not found") + "; ";
                 if (!commitmentMatch) failReason += tr("commitment mismatch") + "; ";
-                if (!cryptoVerified) failReason += tr("OQS_SIG_verify() failed") + "; ";
+                if (!cryptoVerified) failReason += QString::fromLatin1(PQCGetVerifierName(txrType)) + " " + tr("failed") + "; ";
                 strHTML += "<b>" + tr("PQC signature validation") + ":</b> <span style=\"color:red;\">"
                           + tr("FAILED — %1").arg(failReason) + "</span><br>";
             }

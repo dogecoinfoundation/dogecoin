@@ -71,7 +71,16 @@ EXPERIMENTAL_FEATURE
 
 namespace {
 
-const char* PQCSignatureStorageKeyForAlgorithm(const QString& algorithm)
+QByteArray Sha256Bytes(const QByteArray& input)
+{
+    unsigned char digest[CSHA256::OUTPUT_SIZE];
+    CSHA256().Write(reinterpret_cast<const unsigned char*>(input.constData()), input.size()).Finalize(digest);
+    QByteArray out(reinterpret_cast<const char*>(digest), sizeof(digest));
+    memory_cleanse(digest, sizeof(digest));
+    return out;
+}
+
+const char* PQCSignatureStoragePrefixForAlgorithm(const QString& algorithm)
 {
     if (algorithm == "dilithium2") return "pqc_sigkey_dilithium2";
 #ifdef ENABLE_LIBOQS_RACCOON
@@ -80,13 +89,16 @@ const char* PQCSignatureStorageKeyForAlgorithm(const QString& algorithm)
     return "pqc_sigkey_falcon512";
 }
 
-QByteArray Sha256Bytes(const QByteArray& input)
+// Build a per-public-key storage key so the wallet can hold multiple stored
+// keypairs per algorithm. Suffix is the first 16 hex chars (8 bytes) of
+// SHA256(public_key_hex_bytes); the input is the ASCII hex string itself so
+// callers can compute the same key from a JSON-loaded pubHex without re-decoding.
+std::string PQCSignatureStorageKeyForPubHex(const QString& algorithm, const QString& pubHex)
 {
-    unsigned char digest[CSHA256::OUTPUT_SIZE];
-    CSHA256().Write(reinterpret_cast<const unsigned char*>(input.constData()), input.size()).Finalize(digest);
-    QByteArray out(reinterpret_cast<const char*>(digest), sizeof(digest));
-    memory_cleanse(digest, sizeof(digest));
-    return out;
+    const QByteArray pubHexBytes = pubHex.toLatin1();
+    const QByteArray digest = Sha256Bytes(pubHexBytes);
+    const QString suffix = QString::fromLatin1(digest.left(8).toHex());
+    return std::string(PQCSignatureStoragePrefixForAlgorithm(algorithm)) + "_" + suffix.toStdString();
 }
 
 QByteArray DeriveKeyMaterial(const QByteArray& secret, const QByteArray& context, int outLen)
@@ -1142,47 +1154,44 @@ void WalletView::showPQCSignatureDialog()
             refreshStoredStatus();
             return;
         }
-        struct KeyItem {
-            const char* storageKey;
-            const char* algorithm;
-        };
-        const KeyItem items[] = {
-            {"pqc_sigkey_falcon512", "falcon512"},
-            {"pqc_sigkey_dilithium2", "dilithium2"},
+        const char* algorithms[] = {
+            "falcon512",
+            "dilithium2",
 #ifdef ENABLE_LIBOQS_RACCOON
-            {"pqc_sigkey_raccoong44", "raccoong44"}
+            "raccoong44"
 #endif
         };
 
-        for (size_t i = 0; i < sizeof(items) / sizeof(items[0]); ++i) {
-            std::string metaJson;
-            if (!walletModel->getWalletMeta(items[i].storageKey, &metaJson)) {
-                continue;
+        for (size_t i = 0; i < sizeof(algorithms) / sizeof(algorithms[0]); ++i) {
+            const QString algorithmName = QString::fromLatin1(algorithms[i]);
+            const std::string prefix = PQCSignatureStoragePrefixForAlgorithm(algorithmName);
+            const auto entries = walletModel->listWalletMetaWithPrefix(prefix);
+            for (const auto& kv : entries) {
+                QJsonParseError parseError;
+                QJsonDocument doc = QJsonDocument::fromJson(QByteArray::fromStdString(kv.second), &parseError);
+                if (parseError.error != QJsonParseError::NoError || !doc.isObject()) {
+                    continue;
+                }
+                const QJsonObject obj = doc.object();
+                const QString pubHex = obj.value("public_key_hex").toString().trimmed();
+                if (pubHex.isEmpty()) {
+                    continue;
+                }
+                QString label = QString("%1 • %2...%3")
+                    .arg(algorithmName)
+                    .arg(pubHex.left(10))
+                    .arg(pubHex.right(8));
+                const QString created = obj.value("created_utc").toString().trimmed();
+                if (!created.isEmpty()) {
+                    label += tr(" (created %1)").arg(created);
+                }
+                QListWidgetItem* item = new QListWidgetItem(label, keyInventoryList);
+                item->setData(Qt::UserRole, algorithmName);
+                item->setData(Qt::UserRole + 1, pubHex);
+                item->setData(Qt::UserRole + 2, QString::fromStdString(kv.first));
+                item->setData(Qt::UserRole + 3, !obj.value("encrypted_private_key_hex").toString().isEmpty());
+                item->setData(Qt::UserRole + 4, created);
             }
-            QJsonParseError parseError;
-            QJsonDocument doc = QJsonDocument::fromJson(QByteArray::fromStdString(metaJson), &parseError);
-            if (parseError.error != QJsonParseError::NoError || !doc.isObject()) {
-                continue;
-            }
-            const QJsonObject obj = doc.object();
-            const QString pubHex = obj.value("public_key_hex").toString().trimmed();
-            if (pubHex.isEmpty()) {
-                continue;
-            }
-            QString label = QString("%1 • %2...%3")
-                .arg(QString::fromLatin1(items[i].algorithm))
-                .arg(pubHex.left(10))
-                .arg(pubHex.right(8));
-            const QString created = obj.value("created_utc").toString().trimmed();
-            if (!created.isEmpty()) {
-                label += tr(" (created %1)").arg(created);
-            }
-            QListWidgetItem* item = new QListWidgetItem(label, keyInventoryList);
-            item->setData(Qt::UserRole, QString::fromLatin1(items[i].algorithm));
-            item->setData(Qt::UserRole + 1, pubHex);
-            item->setData(Qt::UserRole + 2, QString::fromLatin1(items[i].storageKey));
-            item->setData(Qt::UserRole + 3, !obj.value("encrypted_private_key_hex").toString().isEmpty());
-            item->setData(Qt::UserRole + 4, created);
         }
 
         for (int i = 0; i < keyInventoryList->count(); ++i) {
@@ -1430,7 +1439,7 @@ void WalletView::showPQCSignatureDialog()
         keyObj["kdf_rounds"] = 25000;
         const QByteArray serialized = QJsonDocument(keyObj).toJson(QJsonDocument::Compact);
 
-        const char* storageKey = PQCSignatureStorageKeyForAlgorithm(selectedAlgorithm);
+        const std::string storageKey = PQCSignatureStorageKeyForPubHex(selectedAlgorithm, publicHex);
         if (!walletModel->saveWalletMeta(storageKey, serialized.toStdString())) {
             actionStatusLabel->setText(tr("Failed to persist imported PQC key pair."));
             return;
@@ -1544,7 +1553,8 @@ void WalletView::showPQCSignatureDialog()
         keyObj["kdf_rounds"] = 25000;
         const QByteArray serialized = QJsonDocument(keyObj).toJson(QJsonDocument::Compact);
 
-        const char* storageKey = PQCSignatureStorageKeyForAlgorithm(algorithm->currentText());
+        const QString generatedPubHex = QString::fromLatin1(publicKey.toHex());
+        const std::string storageKey = PQCSignatureStorageKeyForPubHex(algorithm->currentText(), generatedPubHex);
         if (!walletModel->saveWalletMeta(storageKey, serialized.toStdString())) {
             progress.close();
             actionStatusLabel->setText(tr("Failed to persist generated PQC key in wallet metadata."));
@@ -1561,7 +1571,6 @@ void WalletView::showPQCSignatureDialog()
             .arg(algorithm->currentText())
             .arg(publicKey.size()));
 
-        const QString generatedPubHex = QString::fromLatin1(publicKey.toHex());
         actionStatusLabel->setText(tr("Generated and stored %1 key pair in wallet metadata (private key encrypted, pk=%2 bytes).")
                                    .arg(algorithm->currentText())
                                    .arg(publicKey.size()));

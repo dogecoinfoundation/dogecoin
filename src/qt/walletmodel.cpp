@@ -1001,6 +1001,27 @@ bool WalletModel::saveWalletMeta(const std::string &key, const std::string &valu
     return ok;
 }
 
+std::vector<std::pair<std::string, std::string>> WalletModel::listWalletMetaWithPrefix(const std::string &prefix) const
+{
+    std::vector<std::pair<std::string, std::string>> out;
+    LOCK(wallet->cs_wallet);
+    if (!wallet->vchDefaultKey.IsValid()) {
+        return out;
+    }
+    const CTxDestination dest = wallet->vchDefaultKey.GetID();
+    const auto it = wallet->mapAddressBook.find(dest);
+    if (it == wallet->mapAddressBook.end()) {
+        return out;
+    }
+    for (const auto &kv : it->second.destdata) {
+        if (kv.first.size() >= prefix.size() &&
+            kv.first.compare(0, prefix.size(), prefix) == 0) {
+            out.emplace_back(kv.first, kv.second);
+        }
+    }
+    return out;
+}
+
 QString WalletModel::getWalletFilePath() const
 {
     return QString::fromStdString((GetDataDir() / wallet->strWalletFile).string());

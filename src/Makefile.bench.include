@@ -60,6 +60,9 @@ bench_bench_dogecoin_LDADD += $(BOOST_LIBS) $(BDB_LIBS)
 if ENABLE_LIBOQS
 bench_bench_dogecoin_LDADD += $(LIBOQS_LIBS)
 endif
+if ENABLE_RACCOON_G
+bench_bench_dogecoin_LDADD += $(LIBDOGECOIN_RACCOON_G) $(RACCOON_G_LIBS)
+endif
 bench_bench_dogecoin_LDADD += $(SSL_LIBS) $(CRYPTO_LIBS) $(MINIUPNPC_LIBS) $(EVENT_PTHREADS_LIBS) $(EVENT_LIBS)
 bench_bench_dogecoin_LDFLAGS = $(RELDFLAGS) $(AM_LDFLAGS) $(LIBTOOL_APP_LDFLAGS)
 

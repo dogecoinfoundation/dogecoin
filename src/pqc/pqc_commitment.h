@@ -217,6 +217,14 @@ bool PQCSign(PQCCommitmentType type,
              const unsigned char* message, size_t message_len,
              std::vector<unsigned char>& signature_out);
 
+/** Get a human-readable name of the verifier function actually used for a
+ *  given PQC algorithm. Returns "raccoong_verify()" for the in-tree
+ *  Raccoon-G-44 port (when ENABLE_LIBOQS_RACCOON is defined) and
+ *  "OQS_SIG_verify()" for Falcon/Dilithium variants verified via liboqs.
+ *  Returns "PQCVerify()" if no specific backend applies. The returned
+ *  pointer references static storage. */
+const char* PQCGetVerifierName(PQCCommitmentType type);
+
 /** Verify a PQC signature using liboqs.
  *  Returns true if the signature is valid.
  */

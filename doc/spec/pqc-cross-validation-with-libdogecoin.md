@@ -14,7 +14,7 @@ Build libdogecoin with PQC support:
 cd libdogecoin
 ./autogen.sh
 ./configure --enable-liboqs       # Falcon-512 + Dilithium2
-# or: ./configure --enable-liboqs-raccoon  # adds Raccoon-G-44
+# or: ./configure --enable-raccoon-g  # adds Raccoon-G-44 (in-tree port under src/raccoon_g/)
 make
 ```
 

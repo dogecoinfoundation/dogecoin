@@ -148,6 +148,31 @@ BITCOIN_TESTS += \
   test/bip39_tests.cpp
 endif
 
+if ENABLE_RACCOON_G
+# Byte-exact KAT gate for the in-tree Raccoon-G-44 port. The test_raccoong_*
+# C drivers and raccoong_*_vectors.h fixtures are vendored verbatim from
+# edtubbs/libdogecoin@0.1.5-dev-pqc-carrier; the Boost wrapper bridges them
+# into the existing test framework.
+BITCOIN_TESTS += \
+  test/pqc_raccoong_kat_tests.cpp \
+  test/pqc_raccoong_verify_fuzz_tests.cpp \
+  test/utest.h \
+  test/raccoong_polyr_tests.c \
+  test/raccoong_ntt_tests.c \
+  test/raccoong_gaussian_tests.c \
+  test/raccoong_shake_tests.c \
+  test/raccoong_xof_sample_q_tests.c \
+  test/raccoong_matvec_tests.c \
+  test/raccoong_keygen_t_tests.c \
+  test/raccoong_keypair_tests.c \
+  test/raccoong_hd_derive_tests.c \
+  test/raccoong_signature_serialize_tests.c \
+  test/raccoong_hash_vec_tests.c \
+  test/raccoong_chal_poly_tests.c \
+  test/raccoong_buff_mu_tests.c \
+  test/raccoong_sign_tests.c
+endif
+
 if ENABLE_WALLET
 BITCOIN_TESTS += \
   wallet/test/wallet_test_fixture.cpp \
@@ -158,7 +183,7 @@ BITCOIN_TESTS += \
 endif
 
 test_test_dogecoin_SOURCES = $(BITCOIN_TESTS) $(JSON_TEST_FILES) $(RAW_TEST_FILES)
-test_test_dogecoin_CPPFLAGS = $(AM_CPPFLAGS) $(BITCOIN_INCLUDES) -I$(builddir)/test/ $(TESTDEFS) $(EVENT_CFLAGS)
+test_test_dogecoin_CPPFLAGS = $(AM_CPPFLAGS) $(BITCOIN_INCLUDES) -I$(builddir)/test/ -I$(srcdir)/raccoon_g $(TESTDEFS) $(EVENT_CFLAGS)
 test_test_dogecoin_LDADD = $(LIBDOGECOIN_SERVER) $(LIBDOGECOIN_CLI) $(LIBDOGECOIN_COMMON) $(LIBDOGECOIN_UTIL) $(LIBDOGECOIN_CONSENSUS) $(LIBDOGECOIN_CRYPTO) $(LIBDOGECOIN_CRYPTO_SSE41) $(LIBDOGECOIN_CRYPTO_AVX2) $(LIBUNIVALUE) $(LIBLEVELDB) $(LIBMEMENV) \
   $(BOOST_LIBS) $(BOOST_UNIT_TEST_FRAMEWORK_LIB) $(LIBSECP256K1) $(EVENT_LIBS)
 test_test_dogecoin_CXXFLAGS = $(AM_CXXFLAGS) $(PIE_FLAGS)
@@ -169,6 +194,9 @@ endif
 test_test_dogecoin_LDADD += $(LIBDOGECOIN_CONSENSUS) $(BDB_LIBS)
 if ENABLE_LIBOQS
 test_test_dogecoin_LDADD += $(LIBOQS_LIBS)
+endif
+if ENABLE_RACCOON_G
+test_test_dogecoin_LDADD += $(LIBDOGECOIN_RACCOON_G) $(RACCOON_G_LIBS)
 endif
 test_test_dogecoin_LDADD += $(SSL_LIBS) $(CRYPTO_LIBS) $(MINIUPNPC_LIBS)
 test_test_dogecoin_LDFLAGS = $(RELDFLAGS) $(AM_LDFLAGS) $(LIBTOOL_APP_LDFLAGS) -static
@@ -198,6 +226,9 @@ test_test_dogecoin_fuzzy_LDADD = \
 test_test_dogecoin_fuzzy_LDADD += $(BOOST_LIBS)
 if ENABLE_LIBOQS
 test_test_dogecoin_fuzzy_LDADD += $(LIBOQS_LIBS)
+endif
+if ENABLE_RACCOON_G
+test_test_dogecoin_fuzzy_LDADD += $(LIBDOGECOIN_RACCOON_G) $(RACCOON_G_LIBS)
 endif
 test_test_dogecoin_fuzzy_LDADD += $(CRYPTO_LIBS)
 #

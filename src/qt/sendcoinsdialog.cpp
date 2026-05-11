@@ -787,37 +787,39 @@ void SendCoinsDialog::refreshPqcKeyInventory()
         return;
     }
 
-    struct KeyItem {
-        const char* storageKey;
-        const char* algorithm;
-    };
-    const KeyItem items[] = {
-        {"pqc_sigkey_falcon512", "falcon512"},
-        {"pqc_sigkey_dilithium2", "dilithium2"},
+    const char* algorithms[] = {
+        "falcon512",
+        "dilithium2",
 #ifdef ENABLE_LIBOQS_RACCOON
-        {"pqc_sigkey_raccoong44", "raccoong44"}
+        "raccoong44"
+#endif
+    };
+    const char* prefixes[] = {
+        "pqc_sigkey_falcon512",
+        "pqc_sigkey_dilithium2",
+#ifdef ENABLE_LIBOQS_RACCOON
+        "pqc_sigkey_raccoong44"
 #endif
     };
 
-    for (size_t i = 0; i < sizeof(items) / sizeof(items[0]); ++i) {
-        std::string metaJson;
-        if (!model->getWalletMeta(items[i].storageKey, &metaJson)) {
-            continue;
+    for (size_t i = 0; i < sizeof(algorithms) / sizeof(algorithms[0]); ++i) {
+        const auto entries = model->listWalletMetaWithPrefix(prefixes[i]);
+        for (const auto& kv : entries) {
+            QJsonParseError parseError;
+            QJsonDocument doc = QJsonDocument::fromJson(QByteArray::fromStdString(kv.second), &parseError);
+            if (parseError.error != QJsonParseError::NoError || !doc.isObject()) {
+                continue;
+            }
+            const QString pubHex = doc.object().value("public_key_hex").toString().trimmed();
+            if (pubHex.isEmpty()) {
+                continue;
+            }
+            const QString label = QString("%1 • %2...%3")
+                .arg(QString::fromLatin1(algorithms[i]))
+                .arg(pubHex.left(10))
+                .arg(pubHex.right(8));
+            pqcKeyPairComboBox->addItem(label, QString::fromLatin1(algorithms[i]) + "|" + pubHex);
         }
-        QJsonParseError parseError;
-        QJsonDocument doc = QJsonDocument::fromJson(QByteArray::fromStdString(metaJson), &parseError);
-        if (parseError.error != QJsonParseError::NoError || !doc.isObject()) {
-            continue;
-        }
-        const QString pubHex = doc.object().value("public_key_hex").toString().trimmed();
-        if (pubHex.isEmpty()) {
-            continue;
-        }
-        const QString label = QString("%1 • %2...%3")
-            .arg(QString::fromLatin1(items[i].algorithm))
-            .arg(pubHex.left(10))
-            .arg(pubHex.right(8));
-        pqcKeyPairComboBox->addItem(label, QString::fromLatin1(items[i].algorithm) + "|" + pubHex);
     }
 
     if (pqcKeyPairComboBox->count() == 0) {
@@ -875,26 +877,22 @@ void SendCoinsDialog::onGeneratePqcCommitmentClicked()
         return;
     }
 
-    // Retrieve the stored key metadata to get the encrypted private key
-    const char* storageKeys[] = {
-        "pqc_sigkey_falcon512",
-        "pqc_sigkey_dilithium2",
-#ifdef ENABLE_LIBOQS_RACCOON
-        "pqc_sigkey_raccoong44",
-#endif
-    };
+    // Retrieve the stored key metadata to get the encrypted private key.
+    // Multiple stored keypairs may share the same algorithm prefix, so enumerate
+    // all entries under the algorithm's prefix and pick the one whose public key
+    // hex matches the user's selection.
+    const std::string storagePrefix = std::string("pqc_sigkey_") + algorithm.toStdString();
     std::string metaJson;
     bool foundKey = false;
-    for (size_t i = 0; i < sizeof(storageKeys) / sizeof(storageKeys[0]); ++i) {
-        if (model->getWalletMeta(storageKeys[i], &metaJson)) {
-            QJsonDocument doc = QJsonDocument::fromJson(QByteArray::fromStdString(metaJson));
-            if (doc.isObject()) {
-                const QString storedPubHex = doc.object().value("public_key_hex").toString().trimmed();
-                if (storedPubHex == publicKeyHex) {
-                    foundKey = true;
-                    break;
-                }
-            }
+    const auto entries = model->listWalletMetaWithPrefix(storagePrefix);
+    for (const auto& kv : entries) {
+        QJsonDocument doc = QJsonDocument::fromJson(QByteArray::fromStdString(kv.second));
+        if (!doc.isObject()) continue;
+        const QString storedPubHex = doc.object().value("public_key_hex").toString().trimmed();
+        if (storedPubHex == publicKeyHex) {
+            metaJson = kv.second;
+            foundKey = true;
+            break;
         }
     }
     if (!foundKey || metaJson.empty()) {
@@ -1241,7 +1239,7 @@ void SendCoinsDialog::onDecodePqcCommitmentClicked()
 
             html += "<b>" + tr("TX_C sighash (hex)") + ":</b> "
                   + GUIUtil::HtmlEscape(pqcSigningMessageHex.isEmpty() ? tr("n/a") : pqcSigningMessageHex) + "<br>";
-            html += "<b>" + tr("OQS_SIG_verify() cryptographic check") + ":</b> "
+            html += "<b>" + QString::fromLatin1(PQCGetVerifierName(detectedType)) + " " + tr("cryptographic check") + ":</b> "
                   + (cryptoVerified
                        ? "<span style=\"color:green;\">" + tr("PASSED") + "</span>"
                        : "<span style=\"color:red;\">" + tr("FAILED") + "</span>") + "<br>";
@@ -1254,7 +1252,7 @@ void SendCoinsDialog::onDecodePqcCommitmentClicked()
                 if (!pkMatch) failReason += tr("public key mismatch") + "; ";
                 if (!sigMatch) failReason += tr("signature mismatch") + "; ";
                 if (!commitmentMatch) failReason += tr("commitment mismatch") + "; ";
-                if (!cryptoVerified) failReason += tr("OQS_SIG_verify() failed") + "; ";
+                if (!cryptoVerified) failReason += QString::fromLatin1(PQCGetVerifierName(detectedType)) + " " + tr("failed") + "; ";
                 html += "<b>" + tr("PQC signature validation") + ":</b> <span style=\"color:red;\">"
                       + tr("FAILED — %1").arg(failReason) + "</span><br>";
             }
