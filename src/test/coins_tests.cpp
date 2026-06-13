@@ -27,7 +27,7 @@ namespace
 //! equality test
 bool operator==(const Coin &a, const Coin &b) {
     // Empty Coin objects are always equal.
-    if (a.IsPruned() && b.IsPruned()) return true;
+    if (a.IsSpent() && b.IsSpent()) return true;
     return a.fCoinBase == b.fCoinBase &&
            a.nHeight == b.nHeight &&
            a.out == b.out;
@@ -39,35 +39,29 @@ class CCoinsViewTest : public CCoinsView
     std::map<COutPoint, Coin> map_;
 
 public:
-    bool GetCoins(const COutPoint& outpoint, Coin& coin) const
+    bool GetCoin(const COutPoint& outpoint, Coin& coin) const override
     {
         std::map<COutPoint, Coin>::const_iterator it = map_.find(outpoint);
         if (it == map_.end()) {
             return false;
         }
         coin = it->second;
-        if (coin.IsPruned() && insecure_rand() % 2 == 0) {
+        if (coin.IsSpent() && insecure_rand() % 2 == 0) {
             // Randomly return false in case of an empty entry.
             return false;
         }
         return true;
     }
 
-    bool HaveCoins(const COutPoint& outpoint) const
-    {
-        Coin coin;
-        return GetCoins(outpoint, coin);
-    }
-
-    uint256 GetBestBlock() const { return hashBestBlock_; }
+    uint256 GetBestBlock() const override { return hashBestBlock_; }
 
     bool BatchWrite(CCoinsMap& mapCoins, const uint256& hashBlock)
     {
         for (CCoinsMap::iterator it = mapCoins.begin(); it != mapCoins.end(); ) {
             if (it->second.flags & CCoinsCacheEntry::DIRTY) {
                 // Same optimization used in CCoinsViewDB is to only write dirty entries.
-                map_[it->first] = it->second.coins;
-                if (it->second.coins.IsPruned() && insecure_rand() % 3 == 0) {
+                map_[it->first] = it->second.coin;
+                if (it->second.coin.IsSpent() && insecure_rand() % 3 == 0) {
                     // Randomly delete empty entries on write.
                     map_.erase(it->first);
                 }
@@ -90,7 +84,7 @@ public:
         // Manually recompute the dynamic usage of the whole data, and compare it.
         size_t ret = memusage::DynamicUsage(cacheCoins);
         for (CCoinsMap::iterator it = cacheCoins.begin(); it != cacheCoins.end(); it++) {
-            ret += it->second.coins.DynamicMemoryUsage();
+            ret += it->second.coin.DynamicMemoryUsage();
         }
         BOOST_CHECK_EQUAL(DynamicMemoryUsage(), ret);
     }
@@ -145,11 +139,25 @@ BOOST_AUTO_TEST_CASE(coins_cache_simulation_test)
         {
             uint256 txid = txids[insecure_rand() % txids.size()]; // txid we're going to modify in this iteration.
             Coin& coin = result[COutPoint(txid, 0)];
+
+            // Determine whether to test HaveCoin before or after Access* (or both). As these functions
+            // can influence each other's behaviour by pulling things into the cache, all combinations
+            // are tested.
+            bool test_havecoin_before = insecure_rand() % 4 == 0;
+            bool test_havecoin_after = insecure_rand() % 4 == 0;
+
+            bool result_havecoin = test_havecoin_before ? stack.back()->HaveCoin(COutPoint(txid, 0)) : false;
             const Coin& entry = stack.back()->AccessCoin(COutPoint(txid, 0));
             BOOST_CHECK(coin == entry);
+            BOOST_CHECK(!test_havecoin_before || result_havecoin == !entry.IsSpent());
 
-            if (insecure_rand() % 5 == 0 || coin.IsPruned()) {
-                if (coin.IsPruned()) {
+            if (test_havecoin_after) {
+                bool ret = stack.back()->HaveCoin(COutPoint(txid, 0));
+                BOOST_CHECK(ret == !entry.IsSpent());
+            }
+
+            if (insecure_rand() % 5 == 0 || coin.IsSpent()) {
+                if (coin.IsSpent()) {
                     added_an_entry = true;
                 } else {
                     updated_an_entry = true;
@@ -160,7 +168,7 @@ BOOST_AUTO_TEST_CASE(coins_cache_simulation_test)
                 coin.Clear();
                 removed_an_entry = true;
             }
-            if (coin.IsPruned()) {
+            if (coin.IsSpent()) {
                 stack.back()->SpendCoin(COutPoint(txid, 0));
             } else {
                 stack.back()->AddCoin(COutPoint(txid, 0), Coin(coin), true);
@@ -172,7 +180,7 @@ BOOST_AUTO_TEST_CASE(coins_cache_simulation_test)
             for (auto it = result.begin(); it != result.end(); it++) {
                 const Coin& coin = stack.back()->AccessCoin(it->first);
                 BOOST_CHECK(coin == it->second);
-                if (coin.IsPruned()) {
+                if (coin.IsSpent()) {
                     missed_an_entry = true;
                 } else {
                     found_an_entry = true;
@@ -278,7 +286,7 @@ BOOST_AUTO_TEST_CASE(updatecoins_simulation_test)
             tx.vout.resize(1);
             tx.vout[0].nValue = i; //Keep txs unique unless intended to duplicate
             unsigned int height = insecure_rand();
-            Coin oldcoins;
+            Coin old_coin;
 
             // 2/20 times create a new coinbase
             if (randiter % 20 < 2 || coinbaseids.size() < 10) {
@@ -330,7 +338,7 @@ BOOST_AUTO_TEST_CASE(updatecoins_simulation_test)
                     assert(!CTransaction(tx).IsCoinBase());
                 }
                 // In this simple test coins only have two states, spent or unspent, save the unspent state to restore
-                oldcoins = result[prevout];
+                old_coin = result[prevout];
                 // Update the expected result of prevouthash to know these coins are spent
                 result[prevout].Clear();
 
@@ -356,7 +364,7 @@ BOOST_AUTO_TEST_CASE(updatecoins_simulation_test)
             utxoset.insert(outpoint);
 
             // Track this tx and undo info to use later
-            utxoData.emplace(outpoint, std::make_tuple(tx,undo,oldcoins));
+            utxoData.emplace(outpoint, std::make_tuple(tx,undo,old_coin));
         } else if (utxoset.size()) {
             //1/20 times undo a previous transaction
             auto utxod = FindRandomFrom(utxoset);
@@ -505,11 +513,11 @@ void SetCoinsValue(CAmount value, Coin& coin)
 {
     assert(value != ABSENT);
     coin.Clear();
-    assert(coin.IsPruned());
+    assert(coin.IsSpent());
     if (value != PRUNED) {
         coin.out.nValue = value;
         coin.nHeight = 1;
-        assert(!coin.IsPruned());
+        assert(!coin.IsSpent());
     }
 }
 
@@ -522,10 +530,10 @@ size_t InsertCoinsMapEntry(CCoinsMap& map, CAmount value, char flags)
     assert(flags != NO_ENTRY);
     CCoinsCacheEntry entry;
     entry.flags = flags;
-    SetCoinsValue(value, entry.coins);
+    SetCoinsValue(value, entry.coin);
     auto inserted = map.emplace(OUTPOINT, std::move(entry));
     assert(inserted.second);
-    return inserted.first->second.coins.DynamicMemoryUsage();
+    return inserted.first->second.coin.DynamicMemoryUsage();
 }
 
 void GetCoinsMapEntry(const CCoinsMap& map, CAmount& value, char& flags)
@@ -535,10 +543,10 @@ void GetCoinsMapEntry(const CCoinsMap& map, CAmount& value, char& flags)
         value = ABSENT;
         flags = NO_ENTRY;
     } else {
-        if (it->second.coins.IsPruned()) {
+        if (it->second.coin.IsSpent()) {
             value = PRUNED;
         } else {
-            value = it->second.coins.out.nValue;
+            value = it->second.coin.out.nValue;
         }
         flags = it->second.flags;
         assert(flags != NO_ENTRY);
@@ -597,7 +605,7 @@ BOOST_AUTO_TEST_CASE(ccoins_access)
     CheckAccessCoin(ABSENT, VALUE2, VALUE2, FRESH      , FRESH      );
     CheckAccessCoin(ABSENT, VALUE2, VALUE2, DIRTY      , DIRTY      );
     CheckAccessCoin(ABSENT, VALUE2, VALUE2, DIRTY|FRESH, DIRTY|FRESH);
-    CheckAccessCoin(PRUNED, ABSENT, PRUNED, NO_ENTRY   , FRESH      );
+    CheckAccessCoin(PRUNED, ABSENT, ABSENT, NO_ENTRY   , NO_ENTRY   );
     CheckAccessCoin(PRUNED, PRUNED, PRUNED, 0          , 0          );
     CheckAccessCoin(PRUNED, PRUNED, PRUNED, FRESH      , FRESH      );
     CheckAccessCoin(PRUNED, PRUNED, PRUNED, DIRTY      , DIRTY      );

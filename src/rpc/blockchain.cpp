@@ -20,6 +20,7 @@
 #include "rpc/server.h"
 #include "streams.h"
 #include "sync.h"
+#include "txdb.h"
 #include "txmempool.h"
 #include "undo.h"
 #include "util.h"
@@ -999,7 +1000,7 @@ UniValue gettxoutsetinfo(const JSONRPCRequest& request)
 
     CCoinsStats stats;
     FlushStateToDisk();
-    if (GetUTXOStats(pcoinsTip, stats)) {
+    if (GetUTXOStats(pcoinsdbview, stats)) {
         ret.pushKV("height", (int64_t)stats.nHeight);
         ret.pushKV("bestblock", stats.hashBlock.GetHex());
         ret.pushKV("transactions", (int64_t)stats.nTransactions);
@@ -1066,13 +1067,13 @@ UniValue gettxout(const JSONRPCRequest& request)
     if (fMempool) {
         LOCK(mempool.cs);
         CCoinsViewMemPool view(pcoinsTip, mempool);
-        if (!view.GetCoins(out, coin) || mempool.isSpent(out)) // TODO: this should be done by the CCoinsViewMemPool
+        if (!view.GetCoin(out, coin) || mempool.isSpent(out)) // TODO: this should be done by the CCoinsViewMemPool
             return NullUniValue;
     } else {
-        if (!pcoinsTip->GetCoins(out, coin))
+        if (!pcoinsTip->GetCoin(out, coin))
             return NullUniValue;
     }
-    if (coin.IsPruned())
+    if (coin.IsSpent())
         return NullUniValue;
 
     BlockMap::iterator it = mapBlockIndex.find(pcoinsTip->GetBestBlock());

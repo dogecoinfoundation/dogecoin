@@ -40,6 +40,7 @@ class CBlockTreeDB;
 class CBloomFilter;
 class CBlockUndo;
 class CChainParams;
+class CCoinsViewDB;
 class CInv;
 class CConnman;
 class CScriptCheck;
@@ -551,6 +552,9 @@ bool ResetBlockFailureFlags(CBlockIndex *pindex);
 
 /** The currently-connected chain of blocks (protected by cs_main). */
 extern CChain chainActive;
+
+/** Global variable that points to the coins database (protected by cs_main) */
+extern CCoinsViewDB *pcoinsdbview;
 
 /** Global variable that points to the active CCoinsView (protected by cs_main) */
 extern CCoinsViewCache *pcoinsTip;
