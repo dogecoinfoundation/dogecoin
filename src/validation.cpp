@@ -20,6 +20,7 @@
 #include "init.h"
 #include "policy/fees.h"
 #include "policy/policy.h"
+#include "policy/fees.h"
 #include "pow.h"
 #if ENABLE_LIBOQS
 #include "pqc/pqc_commitment.h"
@@ -91,7 +92,8 @@ uint256 hashAssumeValid;
 CFeeRate minRelayTxFeeRate = CFeeRate(DEFAULT_MIN_RELAY_TX_FEE);
 CAmount maxTxFee = DEFAULT_TRANSACTION_MAXFEE;
 
-CTxMemPool mempool(::minRelayTxFeeRate);
+CBlockPolicyEstimator mempoolEstimator(::minRelayTxFeeRate);
+CTxMemPool mempool(&mempoolEstimator);
 
 /**
  * Returns true if there are nRequired or more blocks of minVersion or above
@@ -762,8 +764,16 @@ bool AcceptToMemoryPoolWorker(CTxMemPool& pool, CValidationState& state, const C
         double nPriorityDummy = 0;
         pool.ApplyDeltas(hash, nPriorityDummy, nModifiedFees);
 
-        CAmount inChainInputValue;
-        double dPriority = view.GetPriority(tx, chainActive.Height(), inChainInputValue);
+        CAmount inChainInputValue = 0;
+        double dPriorityInputs = 0.0;
+        BOOST_FOREACH(const CTxIn& txin, tx.vin) {
+            const Coin& coin = view.AccessCoin(txin.prevout);
+            if (!coin.IsPruned() && coin.nHeight <= chainActive.Height()) {
+                dPriorityInputs += (double)coin.out.nValue * (chainActive.Height() - coin.nHeight);
+                inChainInputValue += coin.out.nValue;
+            }
+        }
+        double dPriority = tx.ComputePriority(dPriorityInputs);
 
         // Keep track of transactions that spend a coinbase, which we re-scan
         // during reorgs to ensure COINBASE_MATURITY is still met.
@@ -1439,22 +1449,22 @@ bool CheckTxInputs(const CChainParams& params, const CTransaction& tx, CValidati
         for (unsigned int i = 0; i < tx.vin.size(); i++)
         {
             const COutPoint &prevout = tx.vin[i].prevout;
-            const CCoins *coins = inputs.AccessCoins(prevout.hash);
-            assert(coins);
+            const Coin& coin = inputs.AccessCoin(prevout);
+            assert(!coin.IsPruned());
 
             // If prev is coinbase, check that it's matured
-            if (coins->IsCoinBase()) {
+            if (coin.IsCoinBase()) {
                 // Dogecoin: Switch maturity at depth 145,000
-                int nCoinbaseMaturity = params.GetConsensus(coins->nHeight).nCoinbaseMaturity;
-                if (nSpendHeight - coins->nHeight < nCoinbaseMaturity)
+                int nCoinbaseMaturity = params.GetConsensus(coin.nHeight).nCoinbaseMaturity;
+                if (nSpendHeight - coin.nHeight < nCoinbaseMaturity)
                     return state.Invalid(false,
                         REJECT_INVALID, "bad-txns-premature-spend-of-coinbase",
-                        strprintf("tried to spend coinbase at depth %d", nSpendHeight - coins->nHeight));
+                        strprintf("tried to spend coinbase at depth %d", nSpendHeight - coin.nHeight));
             }
 
             // Check for negative or overflow input values
-            nValueIn += coins->vout[prevout.n].nValue;
-            if (!MoneyRange(coins->vout[prevout.n].nValue) || !MoneyRange(nValueIn))
+            nValueIn += coin.out.nValue;
+            if (!MoneyRange(coin.out.nValue) || !MoneyRange(nValueIn))
                 return state.DoS(100, false, REJECT_INVALID, "bad-txns-inputvalues-outofrange");
 
         }

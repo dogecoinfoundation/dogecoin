@@ -8,7 +8,7 @@
 #include "undo.h"
 #include "utilstrencodings.h"
 #include "test/test_bitcoin.h"
-#include "test/test_random.h"
+#include "random.h"
 #include "validation.h"
 #include "consensus/validation.h"
 
@@ -16,6 +16,8 @@
 #include <map>
 
 #include <boost/test/unit_test.hpp>
+
+static uint32_t insecure_rand() { return InsecureRand32(); }
 
 int ApplyTxInUndo(Coin&& undo, CCoinsViewCache& view, const COutPoint& out);
 void UpdateCoins(const CTransaction& tx, CCoinsViewCache& inputs, CTxUndo &txundo, int nHeight);
