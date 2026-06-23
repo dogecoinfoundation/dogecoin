@@ -36,11 +36,48 @@ class LoadtxoutsetTest(BitcoinTestFramework):
         datadir = os.path.join(self.options.tmpdir, "node0")
         snapshot_path = os.path.join(datadir, "utxos-load.dat")
 
+        missing_snapshot = os.path.join(datadir, "does-not-exist.dat")
+        assert_raises_jsonrpc(
+            -8,
+            "Couldn't open file",
+            node.loadtxoutset,
+            missing_snapshot,
+            "00" * 32,
+        )
+
         dump_result = node.dumptxoutset(snapshot_path)
         snapshot_info = node.gettxoutsetinfo()
 
         assert_equal(dump_result["base_height"], 110)
         assert_equal(snapshot_info["hash_serialized_2"], dump_result["txoutset_hash"])
+
+        bad_magic_path = snapshot_path + ".badmagic"
+        with open(snapshot_path, "rb") as snapshot_file:
+            snapshot_bytes = bytearray(snapshot_file.read())
+        snapshot_bytes[0] ^= 0x01
+        with open(bad_magic_path, "wb") as snapshot_file:
+            snapshot_file.write(snapshot_bytes)
+        assert_raises_jsonrpc(
+            -22,
+            "Unable to parse metadata: Invalid UTXO snapshot magic bytes",
+            node.loadtxoutset,
+            bad_magic_path,
+            dump_result["txoutset_hash"],
+        )
+
+        bad_network_path = snapshot_path + ".badnet"
+        with open(snapshot_path, "rb") as snapshot_file:
+            snapshot_bytes = bytearray(snapshot_file.read())
+        snapshot_bytes[7:11] = b"\x00\x00\x00\x00"
+        with open(bad_network_path, "wb") as snapshot_file:
+            snapshot_file.write(snapshot_bytes)
+        assert_raises_jsonrpc(
+            -8,
+            "Snapshot network does not match this node",
+            node.loadtxoutset,
+            bad_network_path,
+            dump_result["txoutset_hash"],
+        )
 
         node.generate(5)
         assert_equal(node.getblockcount(), 115)
@@ -66,7 +103,6 @@ class LoadtxoutsetTest(BitcoinTestFramework):
         assert_equal(restored_info["transactions"], snapshot_info["transactions"])
         assert_equal(restored_info["txouts"], snapshot_info["txouts"])
         assert_equal(restored_info["hash_serialized_2"], snapshot_info["hash_serialized_2"])
-
 
 if __name__ == '__main__':
     LoadtxoutsetTest().main()

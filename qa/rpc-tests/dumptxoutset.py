@@ -80,6 +80,15 @@ class DumptxoutsetTest(BitcoinTestFramework):
         assert result2['path'].endswith("utxos2.dat")
         assert os.path.exists(result2['path'])
 
+        # Invalid output directories should fail cleanly
+        invalid_path = os.path.join(datadir, "missing", "utxos3.dat")
+        assert_raises_jsonrpc(
+            -8,
+            "Couldn't open file",
+            node.dumptxoutset,
+            invalid_path,
+        )
+
         print("dumptxoutset tests passed")
 
 
