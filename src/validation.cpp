@@ -2770,9 +2770,15 @@ bool RewindChainstateToGenesis(CValidationState& state, const CChainParams& chai
     }
 
     while (chainActive.Height() > 0) {
+        CBlockIndex* pindexDisconnecting = chainActive.Tip();
         if (!DisconnectTip(state, chainparams, true)) {
             return error("RewindChainstateToGenesis: unable to disconnect block at height %i", chainActive.Height());
         }
+        // Re-add disconnected blocks to the candidate set so that CheckBlockIndex
+        // invariants are satisfied after ActivateSnapshotTip sets a new tip.
+        // This mirrors what ActivateBestChainStep does when disconnecting blocks
+        // during a reorg.
+        setBlockIndexCandidates.insert(pindexDisconnecting);
     }
 
     return FlushStateToDisk(state, FLUSH_STATE_ALWAYS);
