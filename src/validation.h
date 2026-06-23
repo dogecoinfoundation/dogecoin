@@ -548,6 +548,12 @@ bool PreciousBlock(CValidationState& state, const CChainParams& params, CBlockIn
 /** Mark a block as invalid. */
 bool InvalidateBlock(CValidationState& state, const CChainParams& chainparams, CBlockIndex *pindex);
 
+/** Rewind the active chainstate back to genesis. */
+bool RewindChainstateToGenesis(CValidationState& state, const CChainParams& chainparams);
+
+/** Set the active chain tip to a block whose chainstate has been loaded separately. */
+bool ActivateSnapshotTip(CValidationState& state, const CChainParams& chainparams, CBlockIndex* pindexSnapshot);
+
 /** Remove invalidity status from a block and its descendants. */
 bool ResetBlockFailureFlags(CBlockIndex *pindex);
 

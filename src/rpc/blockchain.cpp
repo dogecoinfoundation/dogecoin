@@ -928,6 +928,98 @@ static bool GetUTXOStats(CCoinsView *view, CCoinsStats &stats)
     return true;
 }
 
+static bool ComputeSnapshotStats(
+    CAutoFile& afile,
+    const SnapshotMetadata& metadata,
+    CCoinsStats& stats,
+    std::string& error)
+{
+    stats = CCoinsStats();
+    stats.hashBlock = metadata.m_base_blockhash;
+
+    {
+        LOCK(cs_main);
+        BlockMap::iterator it = mapBlockIndex.find(metadata.m_base_blockhash);
+        if (it == mapBlockIndex.end()) {
+            error = "Unable to find snapshot base block";
+            return false;
+        }
+        stats.nHeight = it->second->nHeight;
+    }
+
+    CHashWriter ss(SER_GETHASH, PROTOCOL_VERSION);
+    ss << stats.hashBlock;
+
+    uint256 prevkey;
+    std::map<uint32_t, Coin> outputs;
+
+    for (uint64_t coins_loaded = 0; coins_loaded < metadata.m_coins_count; ++coins_loaded) {
+        try {
+            COutPoint key;
+            Coin coin;
+            afile >> key;
+            afile >> coin;
+
+            if (coin.nHeight > static_cast<uint32_t>(stats.nHeight)) {
+                error = strprintf("Bad snapshot data after deserializing %d coins", coins_loaded);
+                return false;
+            }
+            if (!MoneyRange(coin.out.nValue)) {
+                error = strprintf("Bad snapshot data after deserializing %d coins - bad tx out value", coins_loaded);
+                return false;
+            }
+
+            if (!outputs.empty() && key.hash != prevkey) {
+                ApplyStats(stats, ss, prevkey, outputs);
+                outputs.clear();
+            }
+            prevkey = key.hash;
+            outputs[key.n] = coin;
+            stats.coins_count++;
+        } catch (const std::ios_base::failure&) {
+            error = strprintf("Bad snapshot format or truncated snapshot after deserializing %d coins", coins_loaded);
+            return false;
+        }
+    }
+
+    if (!outputs.empty()) {
+        ApplyStats(stats, ss, prevkey, outputs);
+    }
+    stats.hashSerialized = ss.GetHash();
+
+    try {
+        unsigned char leftover;
+        afile >> leftover;
+        error = strprintf("Bad snapshot - coins left over after deserializing %d coins", metadata.m_coins_count);
+        return false;
+    } catch (const std::ios_base::failure&) {
+    }
+
+    return true;
+}
+
+static bool LoadSnapshotCoins(CAutoFile& afile, const SnapshotMetadata& metadata)
+{
+    CCoinsViewCache snapshot_cache(pcoinsdbview);
+
+    for (uint64_t coins_loaded = 0; coins_loaded < metadata.m_coins_count; ++coins_loaded) {
+        COutPoint key;
+        Coin coin;
+        afile >> key;
+        afile >> coin;
+        snapshot_cache.AddCoin(key, std::move(coin), false);
+
+        if ((coins_loaded + 1) % 50000 == 0) {
+            if (!snapshot_cache.Flush()) {
+                return false;
+            }
+        }
+    }
+
+    snapshot_cache.SetBestBlock(metadata.m_base_blockhash);
+    return snapshot_cache.Flush();
+}
+
 UniValue pruneblockchain(const JSONRPCRequest& request)
 {
     if (request.fHelp || request.params.size() != 1)
@@ -1966,6 +2058,115 @@ UniValue dumptxoutset(const JSONRPCRequest& request)
     return result;
 }
 
+UniValue loadtxoutset(const JSONRPCRequest& request)
+{
+    if (request.fHelp || request.params.size() != 2)
+        throw runtime_error(
+            "loadtxoutset \"path\" \"txoutset_hash\"\n"
+            "\nLoad a previously dumped UTXO set from disk into the active chainstate.\n"
+            "The snapshot base block must already be part of the active chain, and the\n"
+            "provided txoutset hash must match the snapshot contents.\n"
+            "\nArguments:\n"
+            "1. \"path\"           (string, required) Path to the snapshot file. If relative, will be prefixed by datadir.\n"
+            "2. \"txoutset_hash\"  (string, required) Expected hash_serialized_2 for the snapshot contents.\n"
+            "\nResult:\n"
+            "{\n"
+            "  \"coins_loaded\": n,      (numeric) The number of coins loaded from the snapshot\n"
+            "  \"base_hash\": \"hex\",    (string) The hash of the base of the snapshot\n"
+            "  \"base_height\": n,       (numeric) The height of the base of the snapshot\n"
+            "  \"path\": \"path\"         (string) The absolute path to the snapshot file\n"
+            "}\n"
+            "\nExamples:\n"
+            + HelpExampleCli("loadtxoutset", "\"utxo.dat\" \"0123456789abcdef\"")
+            + HelpExampleRpc("loadtxoutset", "\"utxo.dat\", \"0123456789abcdef\"")
+        );
+
+    const fs::path path = fs::absolute(request.params[0].get_str(), GetDataDir());
+    const uint256 expected_hash = ParseHashV(request.params[1], "txoutset_hash");
+
+    FILE* file = fsbridge::fopen(path, "rb");
+    if (file == nullptr) {
+        throw JSONRPCError(RPC_INVALID_PARAMETER, "Couldn't open file " + path.string() + " for reading");
+    }
+
+    SnapshotMetadata metadata;
+    {
+        CAutoFile afile(file, SER_DISK, CLIENT_VERSION);
+        try {
+            afile >> metadata;
+        } catch (const std::ios_base::failure& e) {
+            throw JSONRPCError(RPC_DESERIALIZATION_ERROR, strprintf("Unable to parse metadata: %s", e.what()));
+        }
+    }
+
+    if (memcmp(metadata.m_network_magic, Params().MessageStart(), sizeof(metadata.m_network_magic)) != 0) {
+        throw JSONRPCError(RPC_INVALID_PARAMETER, "Snapshot network does not match this node");
+    }
+
+    CBlockIndex* snapshot_index = NULL;
+    {
+        LOCK(cs_main);
+        BlockMap::iterator it = mapBlockIndex.find(metadata.m_base_blockhash);
+        if (it == mapBlockIndex.end()) {
+            throw JSONRPCError(RPC_INVALID_PARAMETER, "Snapshot base block header not found");
+        }
+        snapshot_index = it->second;
+        if (!chainActive.Contains(snapshot_index)) {
+            throw JSONRPCError(RPC_INVALID_PARAMETER, "Snapshot base block must already be part of the active chain");
+        }
+    }
+
+    CCoinsStats snapshot_stats;
+    std::string snapshot_error;
+    {
+        FILE* verify_file = fsbridge::fopen(path, "rb");
+        if (verify_file == nullptr) {
+            throw JSONRPCError(RPC_INVALID_PARAMETER, "Couldn't reopen file " + path.string() + " for reading");
+        }
+        CAutoFile afile(verify_file, SER_DISK, CLIENT_VERSION);
+        afile >> metadata;
+        if (!ComputeSnapshotStats(afile, metadata, snapshot_stats, snapshot_error)) {
+            throw JSONRPCError(RPC_DESERIALIZATION_ERROR, snapshot_error);
+        }
+    }
+
+    if (snapshot_stats.hashSerialized != expected_hash) {
+        throw JSONRPCError(
+            RPC_INVALID_PARAMETER,
+            strprintf("Snapshot content hash mismatch: expected %s, got %s",
+                expected_hash.GetHex(),
+                snapshot_stats.hashSerialized.GetHex()));
+    }
+
+    CValidationState state;
+    if (!RewindChainstateToGenesis(state, Params())) {
+        throw JSONRPCError(RPC_INTERNAL_ERROR, "Unable to rewind chainstate: " + FormatStateMessage(state));
+    }
+
+    {
+        FILE* load_file = fsbridge::fopen(path, "rb");
+        if (load_file == nullptr) {
+            throw JSONRPCError(RPC_INVALID_PARAMETER, "Couldn't reopen file " + path.string() + " for reading");
+        }
+        CAutoFile afile(load_file, SER_DISK, CLIENT_VERSION);
+        afile >> metadata;
+        if (!LoadSnapshotCoins(afile, metadata)) {
+            throw JSONRPCError(RPC_INTERNAL_ERROR, "Unable to load snapshot coins into chainstate");
+        }
+    }
+
+    if (!ActivateSnapshotTip(state, Params(), snapshot_index)) {
+        throw JSONRPCError(RPC_INTERNAL_ERROR, "Unable to activate loaded snapshot: " + FormatStateMessage(state));
+    }
+
+    UniValue result(UniValue::VOBJ);
+    result.pushKV("coins_loaded", (int64_t)metadata.m_coins_count);
+    result.pushKV("base_hash", snapshot_index->GetBlockHash().GetHex());
+    result.pushKV("base_height", (int64_t)snapshot_index->nHeight);
+    result.pushKV("path", path.string());
+    return result;
+}
+
 static const CRPCCommand commands[] =
 { //  category              name                      actor (function)         okSafe argNames
   //  --------------------- ------------------------  -----------------------  ------ ----------
@@ -1997,6 +2198,7 @@ static const CRPCCommand commands[] =
     { "hidden",             "waitforblock",           &waitforblock,           true,  {"blockhash","timeout"} },
     { "hidden",             "waitforblockheight",     &waitforblockheight,     true,  {"height","timeout"} },
     { "hidden",             "dumptxoutset",           &dumptxoutset,           true,  {"path"} },
+    { "hidden",             "loadtxoutset",           &loadtxoutset,           true,  {"path", "txoutset_hash"} },
 };
 
 void RegisterBlockchainRPCCommands(CRPCTable &t)

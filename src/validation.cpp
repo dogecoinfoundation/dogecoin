@@ -2755,6 +2755,65 @@ bool InvalidateBlock(CValidationState& state, const CChainParams& chainparams, C
     return true;
 }
 
+bool RewindChainstateToGenesis(CValidationState& state, const CChainParams& chainparams)
+{
+    LOCK(cs_main);
+
+    if (mempool.size() != 0) {
+        return state.Error("mempool not empty");
+    }
+
+    for (CBlockIndex* pindex = chainActive.Tip(); pindex != NULL && pindex->pprev != NULL; pindex = pindex->pprev) {
+        if ((pindex->nStatus & BLOCK_HAVE_MASK) != BLOCK_HAVE_MASK) {
+            return state.Error(strprintf("snapshot restore requires block and undo data for block %s", pindex->GetBlockHash().ToString()));
+        }
+    }
+
+    while (chainActive.Height() > 0) {
+        if (!DisconnectTip(state, chainparams, true)) {
+            return error("RewindChainstateToGenesis: unable to disconnect block at height %i", chainActive.Height());
+        }
+    }
+
+    return FlushStateToDisk(state, FLUSH_STATE_ALWAYS);
+}
+
+bool ActivateSnapshotTip(CValidationState& state, const CChainParams& chainparams, CBlockIndex* pindexSnapshot)
+{
+    CBlockIndex* pindexFork = NULL;
+    bool fInitialDownload = false;
+
+    {
+        LOCK(cs_main);
+
+        if (pindexSnapshot == NULL) {
+            return state.Error("snapshot base block not found");
+        }
+        if (chainActive.Height() != 0) {
+            return state.Error("chainstate must be rewound to genesis before activating snapshot");
+        }
+        if (!pindexSnapshot->IsValid(BLOCK_VALID_SCRIPTS) || pindexSnapshot->nChainTx == 0) {
+            return state.Error("snapshot base block must already be fully validated");
+        }
+
+        pindexFork = chainActive.Tip();
+        pcoinsTip->SetBestBlock(pindexSnapshot->GetBlockHash());
+        UpdateTip(pindexSnapshot, chainparams);
+        setBlockIndexCandidates.insert(pindexSnapshot);
+        PruneBlockIndexCandidates();
+        CheckBlockIndex(chainparams.GetConsensus(chainActive.Height()));
+        fInitialDownload = IsInitialBlockDownload();
+
+        if (!FlushStateToDisk(state, FLUSH_STATE_ALWAYS)) {
+            return false;
+        }
+    }
+
+    GetMainSignals().UpdatedBlockTip(pindexSnapshot, pindexFork, fInitialDownload);
+    uiInterface.NotifyBlockTip(fInitialDownload, pindexSnapshot);
+    return true;
+}
+
 bool ResetBlockFailureFlags(CBlockIndex *pindex) {
     AssertLockHeld(cs_main);
 
