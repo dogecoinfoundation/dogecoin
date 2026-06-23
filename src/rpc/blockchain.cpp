@@ -1885,10 +1885,12 @@ UniValue dumptxoutset(const JSONRPCRequest& request)
             "1. \"path\"     (string, required) Path to the output file. If relative, will be prefixed by datadir.\n"
             "\nResult:\n"
             "{\n"
-            "  \"coins_written\": n,     (numeric) The number of coins written in the snapshot\n"
-            "  \"base_hash\": \"hex\",    (string) The hash of the base of the snapshot\n"
-            "  \"base_height\": n,       (numeric) The height of the base of the snapshot\n"
-            "  \"path\": \"path\"         (string) The absolute path to the snapshot file\n"
+            "  \"coins_written\": n,       (numeric) The number of coins written in the snapshot\n"
+            "  \"base_hash\": \"hex\",      (string) The hash of the base of the snapshot\n"
+            "  \"base_height\": n,         (numeric) The height of the base of the snapshot\n"
+            "  \"path\": \"path\",          (string) The absolute path to the snapshot file\n"
+            "  \"txoutset_hash\": \"hex\",  (string) The hash of the UTXO set contents\n"
+            "  \"nchaintx\": n             (numeric) The number of transactions in the chain up to and including the base block\n"
             "}\n"
             "\nExamples:\n"
             + HelpExampleCli("dumptxoutset", "\"utxo.dat\"")
@@ -1930,7 +1932,7 @@ UniValue dumptxoutset(const JSONRPCRequest& request)
         tip = it->second;
     }
 
-    SnapshotMetadata metadata(tip->GetBlockHash(), stats.coins_count, tip->nChainTx);
+    SnapshotMetadata metadata(Params().MessageStart(), tip->GetBlockHash(), stats.coins_count, tip->nChainTx);
     afile << metadata;
 
     COutPoint key;
@@ -1959,6 +1961,8 @@ UniValue dumptxoutset(const JSONRPCRequest& request)
     result.pushKV("base_hash", tip->GetBlockHash().GetHex());
     result.pushKV("base_height", (int64_t)tip->nHeight);
     result.pushKV("path", path.string());
+    result.pushKV("txoutset_hash", stats.hashSerialized.GetHex());
+    result.pushKV("nchaintx", (int64_t)tip->nChainTx);
     return result;
 }
 

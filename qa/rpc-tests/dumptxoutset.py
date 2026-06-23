@@ -53,6 +53,9 @@ class DumptxoutsetTest(BitcoinTestFramework):
         assert_greater_than(result['coins_written'], 0)
         # 110 coinbase transactions = 110 UTXOs (one per block)
         assert_equal(result['coins_written'], 110)
+        # New fields added in session 5
+        assert_equal(len(result['txoutset_hash']), 64)
+        assert_greater_than(result['nchaintx'], 0)
 
         # The final file should exist
         assert os.path.exists(out_path), "snapshot file was not created"
