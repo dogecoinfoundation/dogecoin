@@ -1,8 +1,8 @@
 package=expat
 $(package)_version=2.6.2
-$(package)_download_path=https://downloads.sourceforge.net/project/expat/expat/$($(package)_version)
+$(package)_download_path=https://github.com/libexpat/libexpat/releases/download/R_2_6_2
 $(package)_file_name=$(package)-$($(package)_version).tar.bz2
-$(package)_sha256_hash=9C7C1B5DCBC3C237C500A8FB1493E14D9582146DD9B42AA8D3FFB856A3B927E0
+$(package)_sha256_hash=9c7c1b5dcbc3c237c500a8fb1493e14d9582146dd9b42aa8d3ffb856a3b927e0
 
 define $(package)_config_cmds
   $($(package)_autoconf)

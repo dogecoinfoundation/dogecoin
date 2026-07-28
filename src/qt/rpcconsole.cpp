@@ -16,7 +16,6 @@
 #include "clientmodel.h"
 #include "guiutil.h"
 #include "platformstyle.h"
-#include "bantablemodel.h"
 #include "utilitydialog.h"
 
 #include "chainparams.h"
@@ -41,7 +40,6 @@
 #include <QTime>
 #include <QTimer>
 #include <QStringList>
-#include <QThread>
 #include <functional>
 
 // TODO: add a scrollback limit, as there is currently none
@@ -600,7 +598,7 @@ void RPCConsole::setClientModel(ClientModel *model)
         connect(model->getPeerTableModel(), SIGNAL(layoutChanged()), this, SLOT(peerLayoutChanged()));
         // peer table signal handling - cache selected node ids
         connect(model->getPeerTableModel(), SIGNAL(layoutAboutToBeChanged()), this, SLOT(peerLayoutAboutToChange()));
-        
+
         // set up ban table
         ui->banlistWidget->setModel(model->getBanTableModel());
         ui->banlistWidget->verticalHeader()->hide();
@@ -922,7 +920,7 @@ void RPCConsole::on_openDebugLogfileButton_clicked()
     GUIUtil::openDebugLogfile();
 }
 
-void RPCConsole::on_addPeerClicked() 
+void RPCConsole::on_addPeerClicked()
 {
 
     QWidget *win = new AddPeerDialog(0);
@@ -937,8 +935,8 @@ void RPCConsole::on_addPeerClicked()
     win->move(global.x() - win->width() / 2, global.y() - win->height() / 2);
 }
 
-void RPCConsole::on_removePeerClicked() 
-{    
+void RPCConsole::on_removePeerClicked()
+{
     QList<QModelIndex> ips = GUIUtil::getEntryData(ui->peerWidget, PeerTableModel::Address);
 
     if(ips.size() != 0)
@@ -950,13 +948,13 @@ void RPCConsole::on_removePeerClicked()
             QMessageBox::information(this, tr("Remove Peer"), PeerTools::ManagePeer("remove", address), QMessageBox::Ok, QMessageBox::Ok);
         }
 
-    } else 
+    } else
     {
         QMessageBox::information(this, tr("Remove Peer"), tr("No peer was selected."), QMessageBox::Ok, QMessageBox::Ok);
     }
 }
 
-void RPCConsole::on_testPeerClicked() 
+void RPCConsole::on_testPeerClicked()
 {
     QWidget *win = new TestPeerDialog(0);
 
@@ -1178,7 +1176,7 @@ void RPCConsole::disconnectSelectedNode()
 {
     if(!g_connman)
         return;
-    
+
     // Get selected peer addresses
     QList<QModelIndex> nodes = GUIUtil::getEntryData(ui->peerWidget, PeerTableModel::NetNodeId);
     for(int i = 0; i < nodes.count(); i++)
@@ -1195,7 +1193,7 @@ void RPCConsole::banSelectedNode(int bantime)
 {
     if (!clientModel || !g_connman)
         return;
-    
+
     // Get selected peer addresses
     QList<QModelIndex> nodes = GUIUtil::getEntryData(ui->peerWidget, PeerTableModel::NetNodeId);
     for(int i = 0; i < nodes.count(); i++)
