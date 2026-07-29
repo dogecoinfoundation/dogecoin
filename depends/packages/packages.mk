@@ -13,6 +13,7 @@ wallet_packages=bdb
 
 upnp_packages=miniupnpc
 pqc_packages=liboqs
+raccoon_g_packages=gmp mpfr
 
 avx2_native_packages:=native_nasm
 avx2_x86_64_linux_packages:=intel-ipsec-mb

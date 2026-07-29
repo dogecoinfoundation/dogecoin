@@ -240,6 +240,10 @@ public:
     bool saveReceiveRequest(const std::string &sAddress, const int64_t nId, const std::string &sRequest);
     bool getWalletMeta(const std::string &key, std::string *value) const;
     bool saveWalletMeta(const std::string &key, const std::string &value);
+    // Enumerate all wallet metadata entries on the default key destination whose
+    // storage key begins with the given prefix. Returns (storageKey, value) pairs.
+    // Used by the PQC key UI to list multiple stored keys per algorithm.
+    std::vector<std::pair<std::string, std::string>> listWalletMetaWithPrefix(const std::string &prefix) const;
     QString getWalletFilePath() const;
 
     bool transactionCanBeAbandoned(uint256 hash) const;

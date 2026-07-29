@@ -87,7 +87,7 @@ The following can be set when running make: make FOO=bar
     NO_WALLET: Don't download/build/cache libs needed to enable the wallet
     NO_UPNP: Don't download/build/cache packages needed for enabling upnp
     NO_PQC: Don't download/build/cache packages needed for optional PQC tooling
-    LIBOQS_RACCOON: Build liboqs from edtubbs/liboqs fork with Raccoon-G-44 support
+    RACCOON_G: Set to 'y' to build GMP and MPFR for the in-tree Raccoon-G-44 port (src/raccoon_g/)
     DEBUG: disable some optimizations and enable more runtime checking
     HOST_ID_SALT: Optional salt to use when generating host package ids
     BUILD_ID_SALT: Optional salt to use when generating build package ids

@@ -192,6 +192,14 @@ redeemScript_carrier:
   OP_DROP repeated 5 times (TAG8,HDR8,CHUNK0,CHUNK1,CHUNK2), then OP_TRUE.
 </source>
 
+The 23-byte canonical carrier scriptPubKey (<code>OP_HASH160 <h160> OP_EQUAL</code>) is identical across all PQ algorithms and is also shared with any other carrier scheme that reuses the same fixed 5×OP_DROP + OP_TRUE redeem template (for example a ZK-carrier reveal). Disambiguation is performed exclusively by the leading 8-byte TAG8 push inside the reveal scriptSig (<code>FLC1FULL</code> / <code>DIL2FULL</code> / <code>RCG4FULL</code> here, and other prefixes for non-PQ carriers). Implementations MUST therefore:
+
+* select the carrier type from TAG8, not from the redeemScript or the P2SH spk;
+* treat any new TAG8 prefix as a distinct carrier and reject reuse of an existing prefix for a different payload schema;
+* refuse to interpret a reveal scriptSig whose TAG8 does not match a known carrier prefix.
+
+Future carriers reusing this redeem template MUST register a distinct 8-byte TAG8 to avoid collision with the PQ prefixes defined above.
+
 ====Phase 1: Verification using on-chain data only====
 
 Given TX_R:
@@ -435,77 +443,78 @@ SPV validation log showing commitment detection and Phase 2 PQC signature verifi
 
 ===Raccoon-G-44 Carrier Mode (TX_C + TX_R)===
 
-====Run 1 — TX_C confirmed; TX_R not confirmed (insufficient fee)====
+The Raccoon-G-44 mainnet TX_C+TX_R carrier walkthrough is produced by the
+in-tree Raccoon-G-44 backend (<code>--enable-raccoon-g</code>, byte-exact
+against the upstream <code>p-11/lattice-hd-wallets</code> reference; see
+<code>src/raccoon_g/README.md</code>). The contrib runner is
+<code>contrib/mainnet_raccoong_test.sh</code> (also driven end-to-end by
+<code>contrib/mainnet_pq_cascade_test.sh</code>).
 
-Commitment transaction (TX_C, Run 1) with OP_RETURN commitment and 24 P2SH carrier outputs (2026-04-20):
-
-<source>
-TX_C txid:   b6e065cbb0b42166a3fa0708c664df4a4a726e4b51ec47541634117dc7477c04
-Block:       confirmed mainnet 2026-04-20
-Funded addr: DDMpdcTrWnZT38tRMebbYzCSAgLSnVMqvr
-Commitment:  4f1f783ea83ca3686886ad3e89232e19504dba5500f5d1f1f4c2c3fa253386e6
-
-Outputs:
-  vout 0: change → DDMpdcTrWnZT38tRMebbYzCSAgLSnVMqvr
-  vout 1: OP_RETURN 6a24 52434734 4f1f783ea83ca3686886ad3e89232e19504dba5500f5d1f1f4c2c3fa253386e6
-  vout 2–25: 0.1 DOGE each → A6bAFnGqeKDiYk9dwkLqJSYX96ECHZ2f3q (P2SH carrier, 24 parts)
-</source>
-
-Reveal transaction (TX_R, Run 1):
+Commitment transaction (TX_C) with OP_RETURN <code>RCG4</code> tag and 24
+P2SH <code>RCG4FULL</code> carrier outputs:
 
 <source>
-TX_R txid:   01a4461de63c21cdeb375c2ffd0c31f07ac9f523654abf09f4e3e56d15ad0258
-Status:      broadcast 2026-04-20; not confirmed (TX_R fee insufficient for ~39 KB transaction)
+TX_C txid:   094520f6282ba31ef4bfca7da3879dd1c8c08e77091e51b7340231415d3aadcc
+Block:       6201551 (mainnet, confirmed 2026-05-11T02:36:57Z)
+OP_RETURN:   6a24 52434734 ac10a26b7685b020b2dd1f1e4654ab4d8f055bc354ee147bca12dfe44186d084
+Commitment:  ac10a26b7685b020b2dd1f1e4654ab4d8f055bc354ee147bca12dfe44186d084
+Carrier P2SH scriptPubKey: a9149b402803555511d15d81207d3e2cb3e6bc365e0e87
+Carrier outputs: 24 × 10000000 koinu (0.1 DOGE each)
 </source>
 
-====Run 2 — TX_C and TX_R broadcast with 1 DOGE fee (2026-04-20)====
-
-The Run 1 TX_R was not confirmed due to an insufficient relay fee.  Run 2 repeats the end-to-end
-using the same WIF/address, spending the cascade change output (vout 0) of the Run 1 TX_C as input,
-and sets TX_R fee to 1.0 DOGE (100000000 koinu) for the ~39 KB transaction.
-
-Commitment transaction (TX_C, Run 2) with OP_RETURN commitment and 24 P2SH carrier outputs:
+Reveal transaction (TX_R) spending all 24 P2SH carrier outputs and embedding
+the 16144-byte Raccoon-G-44 public key and 20768-byte signature across 24
+<code>RCG4FULL</code> scriptSigs:
 
 <source>
-TX_C txid:   913f89a45debf6951c70253e55c75bda8e53ff9521d08670ed2355006252a30d
-Input UTXO:  b6e065cbb0b42166a3fa0708c664df4a4a726e4b51ec47541634117dc7477c04:0 (cascade change)
-Block:       6174161 (mainnet, confirmed 2026-04-20T23:30:10Z, txpos=26)
-Funded addr: DDMpdcTrWnZT38tRMebbYzCSAgLSnVMqvr
-Commitment:  7dd12252cd2b388c117d5eb0c26d4d518ce077d07b8100060fbc3e604e0531c8
-
-Outputs:
-  vout 0:  change → DDMpdcTrWnZT38tRMebbYzCSAgLSnVMqvr
-  vout 1:  OP_RETURN 6a24 52434734 7dd12252cd2b388c117d5eb0c26d4d518ce077d07b8100060fbc3e604e0531c8
-  vout 2–25: 0.5 DOGE each → A6bAFnGqeKDiYk9dwkLqJSYX96ECHZ2f3q (P2SH carrier, 24 parts)
+TX_R txid:   c7f00cd24b1049948ec94e96d999fb6cf995519abb2a66eebe7e8933dd092b8b
+Block:       6201557 (mainnet, confirmed 2026-05-11T02:41:48Z)
+vin count:   24 carrier vins (part_total=24, parts 0..23)
+pk_len:      16144 bytes (pk_prefix=ed329ae5ce2303a242c010158a95dcca)
+sig_len:     20768 bytes (sig_prefix=68f337202bd1adc1c50e1599445b8f17)
+sighash32:   dcd0bb61c52a78c124c2222d9a67f2d71d2b5e8d19a9725b53419f7c0df26424
 </source>
 
-Reveal transaction (TX_R, Run 2, ~39 KB, spending all 24 P2SH carrier outputs):
+SPV validation log produced by <code>spvnode</code> (built with
+<code>--enable-raccoon-g</code>) showing OP_RETURN commitment detection,
+cross-TX carrier match, and Phase 2 PQC signature verification:
 
 <source>
-TX_R txid:   9f3b3b49bc156db86b92553b8cf80ee4240d96e2d7fc38712e6551900642020e
-Block:       6174161 (mainnet, confirmed 2026-04-20T23:30:10Z, txpos=32)
-TX_R fee:    1.0 DOGE (100000000 koinu) — adequate for ~39 KB at ≥0.001 DOGE/kB relay rate
-TX_R size:   38802 bytes
-pk_len:      16144 (Raccoon-G-44 public key)
-sig_len:     20768 (Raccoon-G-44 signature)
-part_total:  24 carrier vins (RCG4FULL tag)
-Off-chain verification: PASSED (signature valid; SHA256(pk||sig) matches TX_C OP_RETURN commitment)
+[raccoong-commit] Pending at height=6201551 txpos=7 commit=ac10a26b7685b020b2dd1f1e4654ab4d8f055bc354ee147bca12dfe44186d084 source=op_return
+[raccoong-commit] Valid at height=6201557 txpos=40 commit=ac10a26b7685b020b2dd1f1e4654ab4d8f055bc354ee147bca12dfe44186d084 carrier_vin=0 source=carrier_scriptsig matched_txc_txpos=7 pk_len=16144 sig_len=20768 pk_prefix=ed329ae5ce2303a242c010158a95dcca sig_prefix=68f337202bd1adc1c50e1599445b8f17 txr_txid=c7f00cd24b1049948ec94e96d999fb6cf995519abb2a66eebe7e8933dd092b8b
+[raccoong-commit] PQC signature verification PASSED at height=6201557 txpos=40 sighash=dcd0bb61c52a78c124c2222d9a67f2d71d2b5e8d19a9725b53419f7c0df26424
+[raccoong-commit] Reveal validated: TX_R=c7f00cd24b1049948ec94e96d999fb6cf995519abb2a66eebe7e8933dd092b8b commit=ac10a26b7685b020b2dd1f1e4654ab4d8f055bc354ee147bca12dfe44186d084 pk_len=16144 sig_len=20768 height=6201557
 </source>
 
-SPV validation log showing commitment detection and Phase 2 PQC signature verification (block 6174161):
+The same on-chain pk, sig and reconstructed sighash were cross-validated
+against the upstream Python reference implementation (<code>p-11/lattice-hd-wallets</code>
+pinned at commit <code>461a5ed9b6d57e3bf8c381be3bb79325ab21d906</code>) by
+calling <code>raccoon_primitives._verify_with_unrounded_public_key</code> on
+<code>deserialize_public_key(pk)</code>, <code>deserialize_signature(sig)</code>,
+and the BUFF <code>mu = SHAKE256(SHAKE256(pk).read(32) || sighash32).read(32)</code>:
 
 <source>
-[raccoong-commit] Pending at height=6174161 txpos=26 commit=7dd12252cd2b388c117d5eb0c26d4d518ce077d07b8100060fbc3e604e0531c8 source=op_return
-[raccoong-commit] Valid at height=6174161 txpos=32 commit=7dd12252cd2b388c117d5eb0c26d4d518ce077d07b8100060fbc3e604e0531c8 carrier_vin=0..23 source=carrier_scriptsig matched_txc_txpos=26 pk_len=16144 sig_len=20768 pk_prefix=8c8a6acb1f159d9b sig_prefix=be947bf65d1aaf20 txr_txid=9f3b3b49bc156db86b92553b8cf80ee4240d96e2d7fc38712e6551900642020e
-[raccoong-commit] PQC signature verification PASSED at height=6174161 txpos=32 sighash=bbed8f63bedf2336730b90d241ecc8eaa8afb065ba06afbf990de4233f03022b
-[raccoong-commit] Reveal validated: TX_R=9f3b3b49bc156db86b92553b8cf80ee4240d96e2d7fc38712e6551900642020e commit=7dd12252cd2b388c117d5eb0c26d4d518ce077d07b8100060fbc3e604e0531c8 pk_len=16144 sig_len=20768 height=6174161
+tr  = SHAKE256(pk).read(32)              = 9c4385eefb11280fc8a04af0a91bf5af4c3985b1146291015a7854c339e1d383
+mu  = SHAKE256(tr || sighash32).read(32) = 10ce4086395d0683be3f07bc42b9a5116a4003ac6e0d6ad0d3f3a583850f700d
+upstream raccoon-G-44 verify(vk, mu, sig) = PASS
+SHA256(pk || sig)                        = ac10a26b7685b020b2dd1f1e4654ab4d8f055bc354ee147bca12dfe44186d084
+                                           == on-chain TX_C OP_RETURN commitment ✓
 </source>
 
-Note: The Raccoon-G-44 TX_R fee must be at least 1.0 DOGE (100000000 koinu) for reliable miner inclusion given the ~39 KB transaction size.
+This confirms that the libdogecoin Raccoon-G-44 backend produces public keys,
+signatures, BUFF binding (tr/mu), and commitments that are bit-exact
+compatible with the upstream reference implementation, and that SPV
+validation matches reference-implementation acceptance.
+
+The wire-format and SPV-side validation rules for Raccoon-G-44 are unchanged
+from the rest of this draft: the OP_RETURN tag is <code>"RCG4"</code>, the
+carrier tag is <code>"RCG4FULL"</code>, <code>pk_len = 16144</code>,
+<code>sig_len = 20768</code>, the carrier split is 24 parts, and the
+commitment is <code>SHA256(pk || sig)</code>.
 
 ===SPV Commitment Validation Summary===
 
-The SPV scanner detected and validated the following PQC commitments during mainnet block scan (cascade run 2026-04-20):
+The SPV scanner detected and validated the following PQC commitments during mainnet block scan (Falcon/Dilithium2 cascade run 2026-04-20, Raccoon-G-44 run 2026-05-11):
 
 <source>
 Height   TxPos  Algorithm     Source              Commitment (first 16 hex)        Details
@@ -518,11 +527,11 @@ Height   TxPos  Algorithm     Source              Commitment (first 16 hex)     
 6173895  50     Falcon-512    carrier_scriptsig   e780b663d19966bc...              (pk_len=897, sig_len=655, PASSED)
 6173897  16     Dilithium2    op_return_only      f8dda58255...
 6173902  11     Dilithium2    carrier_scriptsig   f8dda58255...                    (pk_len=1312, sig_len=2420, PASSED)
-6174161  26     Raccoon-G-44  op_return_only      7dd12252cd2b388c...
-6174161  32     Raccoon-G-44  carrier_scriptsig   7dd12252cd2b388c...              (pk_len=16144, sig_len=20768, PASSED)
+6201551  7      Raccoon-G-44  op_return_only      ac10a26b7685b020...
+6201557  40     Raccoon-G-44  carrier_scriptsig   ac10a26b7685b020...              (pk_len=16144, sig_len=20768, PASSED; upstream Python reference verify(vk,mu,sig)=PASS)
 </source>
 
-Note: Validated carrier_scriptsig entries demonstrate the two-transaction carrier pattern (TX_C + TX_R) with full Phase 2 PQC signature verification PASSED for Falcon-512, Dilithium2, and Raccoon-G-44.
+Note: Validated carrier_scriptsig entries demonstrate the two-transaction carrier pattern (TX_C + TX_R) with full Phase 2 PQC signature verification PASSED for Falcon-512, Dilithium2, and Raccoon-G-44. The Raccoon-G-44 entry was additionally cross-validated against the upstream <code>p-11/lattice-hd-wallets</code> Python reference implementation at pinned commit <code>461a5ed9b6d57e3bf8c381be3bb79325ab21d906</code>.
 
 ==Deployment==
 

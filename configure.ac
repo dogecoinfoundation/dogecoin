@@ -259,16 +259,11 @@ AC_ARG_WITH([liboqs],
   [use_liboqs=$withval],
   [use_liboqs=no])
 
-AC_ARG_WITH([liboqs-raccoon],
-  [AS_HELP_STRING([--with-liboqs-raccoon],
-  [enable liboqs support with edtubbs/liboqs fork (adds Raccoon-G-44; default is no)])],
-  [use_liboqs_raccoon=$withval],
-  [use_liboqs_raccoon=no])
-
-dnl --with-liboqs-raccoon implies --with-liboqs
-if test "x$use_liboqs_raccoon" = "xyes"; then
-  use_liboqs=yes
-fi
+AC_ARG_WITH([raccoon-g],
+  [AS_HELP_STRING([--with-raccoon-g],
+  [enable the in-tree Raccoon-G-44 port under src/raccoon_g/ (requires GMP and MPFR; default is no)])],
+  [use_raccoon_g=$withval],
+  [use_raccoon_g=no])
 
 AC_ARG_ENABLE(man,
     [AS_HELP_STRING([--disable-man],
@@ -1044,7 +1039,7 @@ else
   fi
 fi
 
-dnl liboqs support (--with-liboqs or --with-liboqs-raccoon)
+dnl liboqs support (--with-liboqs)
 if test "x$use_liboqs" = "xyes"; then
   DOGECOIN_REQUIRE_EXPERIMENTAL
   if test "x$liboqs_found" != "xyes"; then
@@ -1055,10 +1050,23 @@ else
   AC_DEFINE([ENABLE_LIBOQS],[0],[Define to 1 to enable liboqs support])
 fi
 
-dnl --with-liboqs-raccoon adds Raccoon-G-44 support
-if test "x$use_liboqs_raccoon" = "xyes"; then
-  AC_DEFINE([ENABLE_LIBOQS_RACCOON],[1],[Define to 1 to enable Raccoon-G-44 via edtubbs/liboqs fork])
+dnl --with-raccoon-g enables the in-tree Raccoon-G-44 C port under src/raccoon_g/.
+dnl It requires GMP and MPFR for the rounded Gaussian sampler.
+RACCOON_G_LIBS=
+if test "x$use_raccoon_g" = "xyes"; then
+  DOGECOIN_REQUIRE_EXPERIMENTAL
+  AC_CHECK_HEADER([gmp.h],[],[AC_MSG_ERROR([gmp.h not found; install libgmp-dev or build with depends RACCOON_G=y])])
+  AC_CHECK_LIB([gmp],[__gmpz_init],[RACCOON_G_LIBS="-lgmp $RACCOON_G_LIBS"],
+               [AC_MSG_ERROR([libgmp not found; install libgmp-dev or build with depends RACCOON_G=y])])
+  AC_CHECK_HEADER([mpfr.h],[],[AC_MSG_ERROR([mpfr.h not found; install libmpfr-dev or build with depends RACCOON_G=y])])
+  AC_CHECK_LIB([mpfr],[mpfr_init2],[RACCOON_G_LIBS="-lmpfr $RACCOON_G_LIBS"],
+               [AC_MSG_ERROR([libmpfr not found; install libmpfr-dev or build with depends RACCOON_G=y])],[-lgmp])
+  AC_DEFINE([ENABLE_RACCOON_G],[1],[Define to 1 to enable the in-tree Raccoon-G-44 C port])
+  dnl ENABLE_LIBOQS_RACCOON is the Raccoon-G-44 visibility gate used across
+  dnl src/pqc, src/qt, src/wallet, and src/test.
+  AC_DEFINE([ENABLE_LIBOQS_RACCOON],[1],[Define to 1 to enable Raccoon-G-44 (in-tree port)])
 fi
+AC_SUBST([RACCOON_G_LIBS])
 
 if test x$intel_avx2 = xyes; then
   DOGECOIN_REQUIRE_EXPERIMENTAL
@@ -1305,7 +1313,8 @@ AM_CONDITIONAL([ENABLE_BENCH],[test x$use_bench = xyes])
 AM_CONDITIONAL([USE_QRCODE], [test x$use_qr = xyes])
 AM_CONDITIONAL([USE_BIP39],[test x$use_bip39 = xyes])
 AM_CONDITIONAL([ENABLE_LIBOQS], [test x$use_liboqs = xyes])
-AM_CONDITIONAL([ENABLE_LIBOQS_RACCOON], [test x$use_liboqs_raccoon = xyes])
+AM_CONDITIONAL([ENABLE_LIBOQS_RACCOON], [test x$use_raccoon_g = xyes])
+AM_CONDITIONAL([ENABLE_RACCOON_G], [test x$use_raccoon_g = xyes])
 AM_CONDITIONAL([USE_LCOV],[test x$use_lcov = xyes])
 AM_CONDITIONAL([GLIBC_BACK_COMPAT],[test x$use_glibc_compat = xyes])
 AM_CONDITIONAL([HARDEN],[test x$use_hardening = xyes])
@@ -1455,10 +1464,8 @@ if test x$allow_experimental = xyes; then
     echo "    ARMV82_CXXFLAGS = $ARMV82_CXXFLAGS"
     echo "    LIB BIP39     = $use_lib"
     echo "    BIP39         = $use_bip39"
-    echo "    with liboqs   = $use_liboqs"
-    if test x$use_liboqs = xyes; then
-        echo "      raccoon     = $use_liboqs_raccoon"
-    fi
+    echo "    with liboqs    = $use_liboqs"
+    echo "    with raccoon-g = $use_raccoon_g"
 fi
 echo
 echo "  target os     = $TARGET_OS"
