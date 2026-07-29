@@ -9,6 +9,9 @@
 
 class CWallet;
 class NetworkStyle;
+class QPushButton;
+class QMenu;
+class QAction;
 
 /** Class for the splashscreen with information of the running client.
  *
@@ -35,6 +38,13 @@ public Q_SLOTS:
     /** Show message and progress */
     void showMessage(const QString &message, int alignment, const QColor &color);
 
+    /** Toggle dark mode while splash screen is visible. */
+    void toggleDarkMode();
+    /** Show tint menu for splash dark mode button. */
+    void showDarkTintMenu(const QPoint& point);
+    /** Handle tint selection from splash dark mode button menu. */
+    void onDarkTintSelected(QAction* action);
+
 private:
     /** Connect core signals to splash screen */
     void subscribeToCoreSignals();
@@ -42,11 +52,18 @@ private:
     void unsubscribeFromCoreSignals();
     /** Connect wallet signals to splash screen */
     void ConnectWallet(CWallet*);
+    /** Rebuild splash pixmap with current dark/light mode setting. */
+    void buildPixmap(bool darkModeEnabled);
+    /** Update splash dark mode button label and placement. */
+    void updateDarkModeButton();
 
     QPixmap pixmap;
     QString curMessage;
     QColor curColor;
     int curAlignment;
+    const NetworkStyle* networkStyle;
+    QPushButton* darkModeButton;
+    QMenu* darkModeTintMenu;
 
     QList<CWallet*> connectedWallets;
 };

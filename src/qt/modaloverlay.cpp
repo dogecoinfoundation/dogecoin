@@ -7,6 +7,7 @@
 #include "ui_modaloverlay.h"
 
 #include "guiutil.h"
+#include "platformstyle.h"
 
 #include "chainparams.h"
 
@@ -22,6 +23,7 @@ layerIsVisible(false),
 userClosed(false)
 {
     ui->setupUi(this);
+    updateStyles();
     connect(ui->closeButton, SIGNAL(clicked()), this, SLOT(closeClicked()));
     if (parent) {
         parent->installEventFilter(this);
@@ -30,6 +32,21 @@ userClosed(false)
 
     blockProcessTime.clear();
     setVisible(false);
+}
+
+void ModalOverlay::updateStyles()
+{
+    const bool darkModeEnabled = PlatformStyle::isDarkModeEnabled();
+    ui->bgWidget->setStyleSheet("#bgWidget { background: rgba(0,0,0,220); }");
+    if (darkModeEnabled) {
+        ui->contentWidget->setStyleSheet(
+            "#contentWidget { background: rgba(35,44,38,240); border-radius: 6px; }\n"
+            "QLabel { color: rgb(214,232,220); }");
+    } else {
+        ui->contentWidget->setStyleSheet(
+            "#contentWidget { background: rgba(255,255,255,240); border-radius: 6px; }\n"
+            "QLabel { color: rgb(40,40,40); }");
+    }
 }
 
 ModalOverlay::~ModalOverlay()
@@ -150,6 +167,8 @@ void ModalOverlay::toggleVisibility()
 
 void ModalOverlay::showHide(bool hide, bool userRequested)
 {
+    updateStyles();
+
     if ( (layerIsVisible && !hide) || (!layerIsVisible && hide) || (!hide && userClosed && !userRequested))
         return;
 

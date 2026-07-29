@@ -12,6 +12,7 @@
 
 #include "fs.h"
 #include "guiutil.h"
+#include "platformstyle.h"
 
 #include "util.h"
 
@@ -121,6 +122,7 @@ Intro::Intro(QWidget *parent) :
     signalled(false)
 {
     ui->setupUi(this);
+    PlatformStyle::applyTheme(PlatformStyle::isDarkModeEnabled());
     ui->welcomeLabel->setText(ui->welcomeLabel->text().arg(tr(PACKAGE_NAME)));
     ui->storageLabel->setText(ui->storageLabel->text().arg(tr(PACKAGE_NAME)));
     uint64_t pruneTarget = std::max<int64_t>(0, GetArg("-prune", 0));

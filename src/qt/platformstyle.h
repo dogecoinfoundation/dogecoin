@@ -6,6 +6,7 @@
 #define BITCOIN_QT_PLATFORMSTYLE_H
 
 #include <QIcon>
+#include <QPalette>
 #include <QPixmap>
 #include <QString>
 
@@ -15,6 +16,30 @@ class PlatformStyle
 public:
     /** Get style associated with provided platform name, or 0 if not known */
     static const PlatformStyle *instantiate(const QString &platformId);
+
+    /** Return whether dark mode is currently enabled in GUI settings. */
+    static bool isDarkModeEnabled();
+
+    /** Persist dark mode preference and apply it to the running application. */
+    static void setDarkModeEnabled(bool enabled);
+
+    /** Return current dark-mode tint index. */
+    static int darkModeTint();
+
+    /** Return display label for a dark-mode tint index. */
+    static QString darkModeTintName(int tint);
+
+    /** Return total number of available dark-mode tints. */
+    static int darkModeTintCount();
+
+    /** Persist dark-mode tint and apply immediately when dark mode is enabled. */
+    static void setDarkModeTint(int tint);
+
+    /** Apply either dark or light theme to the running application. */
+    static void applyTheme(bool darkModeEnabled);
+
+    /** Create the default dark mode palette used by the Qt application. */
+    static QPalette createDarkModePalette();
 
     const QString &getName() const { return name; }
 
@@ -52,4 +77,3 @@ private:
 };
 
 #endif // BITCOIN_QT_PLATFORMSTYLE_H
-

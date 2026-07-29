@@ -39,6 +39,8 @@ protected:
     bool event(QEvent* ev);
 
 private:
+    void updateStyles();
+
     Ui::ModalOverlay *ui;
     int bestHeaderHeight; //best known height (based on the headers)
     QDateTime bestHeaderDate;
