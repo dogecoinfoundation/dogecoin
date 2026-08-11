@@ -28,6 +28,7 @@ Core RPC. Maturity is expressed over 3 stages:
 | decoderawtransaction   | STABLE     |                                            |
 | decodescript           | STABLE     |                                            |
 | disconnectnode         | STABLE     |                                            |
+| dumptxoutset           | UNSTABLE   | New in 1.14.99                             |
 | dumpprivkey            | STABLE     |                                            |
 | dumpwallet             | UNSTABLE   | Breaking change since 1.14.6               |
 | encryptwallet          | STABLE     |                                            |
@@ -97,6 +98,7 @@ Core RPC. Maturity is expressed over 3 stages:
 | listtransactions       | STABLE     |                                            |
 | listunspent            | STABLE     |                                            |
 | lockunspent            | STABLE     |                                            |
+| loadtxoutset           | UNSTABLE   | New in 1.14.99                             |
 | move                   | DEPRECATED | Deprecated since 1.14.0                    |
 | ping                   | STABLE     |                                            |
 | preciousblock          | STABLE     |                                            |

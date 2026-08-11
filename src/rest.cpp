@@ -10,6 +10,7 @@
 #include "primitives/transaction.h"
 #include "validation.h"
 #include "httpserver.h"
+#include "rpc/blockchain.h"
 #include "rpc/server.h"
 #include "streams.h"
 #include "sync.h"
@@ -41,25 +42,28 @@ static const struct {
 };
 
 struct CCoin {
-    uint32_t nTxVer; // Don't call this nVersion, that name has a special meaning inside IMPLEMENT_SERIALIZE
     uint32_t nHeight;
     CTxOut out;
 
     ADD_SERIALIZE_METHODS;
 
+    CCoin() : nHeight(0) {}
+    CCoin(Coin&& in) : nHeight(in.nHeight), out(std::move(in.out)) {}
+
     template <typename Stream, typename Operation>
     inline void SerializationOp(Stream& s, Operation ser_action)
     {
-        READWRITE(nTxVer);
+        uint32_t nTxVerDummy = 0;
+        READWRITE(nTxVerDummy);
         READWRITE(nHeight);
         READWRITE(out);
     }
 };
 
 extern void TxToJSON(const CTransaction& tx, const uint256 hashBlock, UniValue& entry);
-extern UniValue blockToJSON(const CBlock& block, const CBlockIndex* blockindex, bool txDetails = false);
+extern UniValue blockToJSON(const CBlock& block, const CBlockIndex* blockindex, bool txDetails);
 extern UniValue mempoolInfoToJSON();
-extern UniValue mempoolToJSON(bool fVerbose = false);
+extern UniValue mempoolToJSON(bool fVerbose);
 extern void ScriptPubKeyToJSON(const CScript& scriptPubKey, UniValue& out, bool fIncludeHex);
 extern UniValue blockheaderToJSON(const CBlockIndex* blockindex);
 
@@ -462,7 +466,6 @@ static bool rest_getutxos(HTTPRequest* req, const std::string& strURIPart)
         std::vector<unsigned char> strRequestV = ParseHex(strRequestMutable);
         strRequestMutable.assign(strRequestV.begin(), strRequestV.end());
     }
-    // Falls through
 
     case RF_BINARY: {
         try {
@@ -520,25 +523,11 @@ static bool rest_getutxos(HTTPRequest* req, const std::string& strURIPart)
         }
 
         for (size_t i = 0; i < vOutPoints.size(); i++) {
-            CCoins coins;
-            uint256 hash = vOutPoints[i].hash;
             bool hit = false;
-            if (view.GetCoins(hash, coins)) {
-                if (fCheckMemPool) {
-                    mempool.pruneSpent(hash, coins);
-                }
-
-                if (coins.IsAvailable(vOutPoints[i].n)) {
-                    hit = true;
-                    // Safe to index into vout here because IsAvailable checked if it's off the end of the array, or if
-                    // n is valid but points to an already spent output (IsNull).
-                    CCoin coin;
-                    coin.nTxVer = coins.nVersion;
-                    coin.nHeight = coins.nHeight;
-                    coin.out = coins.vout.at(vOutPoints[i].n);
-                    assert(!coin.out.IsNull());
-                    outs.push_back(coin);
-                }
+            Coin coin;
+            if (view.GetCoin(vOutPoints[i], coin) && (!fCheckMemPool || !mempool.isSpent(vOutPoints[i]))) {
+                hit = true;
+                outs.emplace_back(std::move(coin));
             }
 
             hits.push_back(hit);
@@ -582,7 +571,6 @@ static bool rest_getutxos(HTTPRequest* req, const std::string& strURIPart)
         UniValue utxos(UniValue::VARR);
         BOOST_FOREACH (const CCoin& coin, outs) {
             UniValue utxo(UniValue::VOBJ);
-            utxo.pushKV("txvers", (int32_t)coin.nTxVer);
             utxo.pushKV("height", (int32_t)coin.nHeight);
             utxo.pushKV("value", ValueFromAmount(coin.out.nValue));
 
