@@ -952,6 +952,8 @@ static bool ComputeSnapshotStats(
 
     uint256 prevkey;
     std::map<uint32_t, Coin> outputs;
+    COutPoint prev_outpoint;
+    bool first_coin = true;
 
     for (uint64_t coins_loaded = 0; coins_loaded < metadata.m_coins_count; ++coins_loaded) {
         try {
@@ -969,19 +971,24 @@ static bool ComputeSnapshotStats(
                 return false;
             }
 
+            // dumptxoutset writes coins in strictly increasing outpoint order
+            // (the database cursor iterates keys sorted by txid bytes, then
+            // output index). Enforcing that order here rejects every
+            // duplicated or reordered coin record - including duplicates that
+            // are separated by other records - before the destructive
+            // chainstate rewind is performed, and guarantees that the
+            // per-txid grouping below matches the grouping used by
+            // gettxoutsetinfo when the expected hash was computed.
+            if (!first_coin && !(prev_outpoint < key)) {
+                error = strprintf("Bad snapshot data after deserializing %d coins - duplicate or out-of-order coin record", coins_loaded);
+                return false;
+            }
+            first_coin = false;
+            prev_outpoint = key;
+
             if (!outputs.empty() && key.hash != prevkey) {
                 ApplyStats(stats, ss, prevkey, outputs);
                 outputs.clear();
-            }
-            // Reject records that would silently be de-duplicated by the
-            // outputs map and therefore hash identically to a clean snapshot.
-            // This only catches duplicates within a run of records for the
-            // same txid; out-of-order duplicates alter the serialized hash
-            // and LoadSnapshotCoins provides the authoritative per-outpoint
-            // duplicate check.
-            if (key.hash == prevkey && outputs.count(key.n)) {
-                error = strprintf("Bad snapshot data after deserializing %d coins - duplicate coin record", coins_loaded);
-                return false;
             }
             prevkey = key.hash;
             outputs[key.n] = coin;
