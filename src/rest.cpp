@@ -1,11 +1,11 @@
 // Copyright (c) 2009-2010 Satoshi Nakamoto
 // Copyright (c) 2009-2016 The Bitcoin Core developers
+// Copyright (c) 2022 The Dogecoin Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #include "chain.h"
 #include "chainparams.h"
-#include "core_io.h"
 #include "primitives/block.h"
 #include "primitives/transaction.h"
 #include "validation.h"
@@ -60,6 +60,7 @@ struct CCoin {
     }
 };
 
+extern void TxToJSON(const CTransaction& tx, const uint256 hashBlock, UniValue& entry);
 extern UniValue blockToJSON(const CBlock& block, const CBlockIndex* blockindex, bool txDetails);
 extern UniValue mempoolInfoToJSON();
 extern UniValue mempoolToJSON(bool fVerbose);
@@ -390,7 +391,7 @@ static bool rest_tx(HTTPRequest* req, const std::string& strURIPart)
 
     case RF_JSON: {
         UniValue objTx(UniValue::VOBJ);
-        TxToUniv(*tx, hashBlock, objTx);
+        TxToJSON(*tx, hashBlock, objTx);
         std::string strJSON = objTx.write() + "\n";
         req->WriteHeader("Content-Type", "application/json");
         req->WriteReply(HTTP_OK, strJSON);
@@ -515,13 +516,16 @@ static bool rest_getutxos(HTTPRequest* req, const std::string& strURIPart)
         CCoinsViewCache& viewChain = *pcoinsTip;
         CCoinsViewMemPool viewMempool(&viewChain, mempool);
 
-        if (fCheckMemPool)
-            view.SetBackend(viewMempool); // switch cache backend to db+mempool in case user likes to query mempool
+        if (fCheckMemPool) {
+            view.SetBackend(viewMempool); // set cache backend to db+mempool in case user likes to query mempool
+        } else {
+            view.SetBackend(viewChain); // set cache backend to db only otherwise
+        }
 
         for (size_t i = 0; i < vOutPoints.size(); i++) {
             bool hit = false;
             Coin coin;
-            if (view.GetCoin(vOutPoints[i], coin) && !mempool.isSpent(vOutPoints[i])) {
+            if (view.GetCoin(vOutPoints[i], coin) && (!fCheckMemPool || !mempool.isSpent(vOutPoints[i]))) {
                 hit = true;
                 outs.emplace_back(std::move(coin));
             }
@@ -593,6 +597,53 @@ static bool rest_getutxos(HTTPRequest* req, const std::string& strURIPart)
     return true; // continue to process further HTTP reqs on this cxn
 }
 
+static bool rest_blockhash_by_height(HTTPRequest* req,
+                        const std::string& str_uri_part)
+ {
+     if (!CheckWarmup(req)) return false;
+     std::string height_str;
+     const RetFormat rf = ParseDataFormat(height_str, str_uri_part);
+
+     int32_t blockheight;
+     if (!ParseInt32(height_str, &blockheight) || blockheight < 0) {
+         return RESTERR(req, HTTP_BAD_REQUEST, "Invalid height: " + SanitizeString(height_str));
+     }
+
+     CBlockIndex* pblockindex = nullptr;
+     {
+         LOCK(cs_main);
+         if (blockheight > chainActive.Height()) {
+             return RESTERR(req, HTTP_NOT_FOUND, "Block height out of range");
+         }
+         pblockindex = chainActive[blockheight];
+     }
+     switch (rf) {
+     case RF_BINARY: {
+         CDataStream ss_blockhash(SER_NETWORK, PROTOCOL_VERSION);
+         ss_blockhash << pblockindex->GetBlockHash();
+         req->WriteHeader("Content-Type", "application/octet-stream");
+         req->WriteReply(HTTP_OK, ss_blockhash.str());
+         return true;
+     }
+     case RF_HEX: {
+         req->WriteHeader("Content-Type", "text/plain");
+         req->WriteReply(HTTP_OK, pblockindex->GetBlockHash().GetHex() + "\n");
+         return true;
+     }
+     case RF_JSON: {
+         req->WriteHeader("Content-Type", "application/json");
+         UniValue resp = UniValue(UniValue::VOBJ);
+         resp.pushKV("blockhash", pblockindex->GetBlockHash().GetHex());
+         req->WriteReply(HTTP_OK, resp.write() + "\n");
+         return true;
+     }
+     default: {
+         return RESTERR(req, HTTP_NOT_FOUND, "output format not found (available: " + AvailableDataFormatsString() + ")");
+     }
+     }
+ }
+
+
 static const struct {
     const char* prefix;
     bool (*handler)(HTTPRequest* req, const std::string& strReq);
@@ -605,6 +656,7 @@ static const struct {
       {"/rest/mempool/contents", rest_mempool_contents},
       {"/rest/headers/", rest_headers},
       {"/rest/getutxos", rest_getutxos},
+      {"/rest/blockhashbyheight/", rest_blockhash_by_height},
 };
 
 bool StartREST()

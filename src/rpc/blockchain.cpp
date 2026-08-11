@@ -973,6 +973,10 @@ static bool ComputeSnapshotStats(
                 ApplyStats(stats, ss, prevkey, outputs);
                 outputs.clear();
             }
+            if (key.hash == prevkey && outputs.count(key.n)) {
+                error = strprintf("Bad snapshot data after deserializing %d coins - duplicate coin record", coins_loaded);
+                return false;
+            }
             prevkey = key.hash;
             outputs[key.n] = coin;
             stats.coins_count++;
@@ -1002,18 +1006,27 @@ static bool LoadSnapshotCoins(CAutoFile& afile, const SnapshotMetadata& metadata
 {
     CCoinsViewCache snapshot_cache(pcoinsdbview);
 
-    for (uint64_t coins_loaded = 0; coins_loaded < metadata.m_coins_count; ++coins_loaded) {
-        COutPoint key;
-        Coin coin;
-        afile >> key;
-        afile >> coin;
-        snapshot_cache.AddCoin(key, std::move(coin), false);
+    try {
+        for (uint64_t coins_loaded = 0; coins_loaded < metadata.m_coins_count; ++coins_loaded) {
+            COutPoint key;
+            Coin coin;
+            afile >> key;
+            afile >> coin;
+            if (snapshot_cache.HaveCoin(key)) {
+                return error("%s: duplicate coin record after loading %d coins", __func__, coins_loaded);
+            }
+            snapshot_cache.AddCoin(key, std::move(coin), false);
 
-        if ((coins_loaded + 1) % 50000 == 0) {
-            if (!snapshot_cache.Flush()) {
-                return false;
+            if ((coins_loaded + 1) % 50000 == 0) {
+                if (!snapshot_cache.Flush()) {
+                    return false;
+                }
             }
         }
+    } catch (const std::ios_base::failure&) {
+        return error("%s: bad snapshot format or truncated snapshot", __func__);
+    } catch (const std::logic_error& e) {
+        return error("%s: %s", __func__, e.what());
     }
 
     snapshot_cache.SetBestBlock(metadata.m_base_blockhash);
@@ -1992,10 +2005,16 @@ UniValue dumptxoutset(const JSONRPCRequest& request)
     fs::path path = fs::absolute(request.params[0].get_str(), GetDataDir());
     fs::path temppath = fs::absolute(request.params[0].get_str() + ".incomplete", GetDataDir());
 
-    if (fs::exists(path) || fs::exists(temppath)) {
+    if (fs::exists(path)) {
         throw JSONRPCError(
             RPC_INVALID_PARAMETER,
-            path.string() + " or its temporary file already exists. Move it out of the way first");
+            path.string() + " already exists. Move it out of the way first");
+    }
+    if (fs::exists(temppath)) {
+        // A leftover .incomplete file can only be the remnant of a previous
+        // dump that failed or was interrupted, so it is safe to remove.
+        LogPrintf("dumptxoutset: removing stale temporary file %s\n", temppath.string());
+        fs::remove(temppath);
     }
 
     FILE* file = fsbridge::fopen(temppath, "wb");
@@ -2025,27 +2044,35 @@ UniValue dumptxoutset(const JSONRPCRequest& request)
     }
 
     SnapshotMetadata metadata(Params().MessageStart(), tip->GetBlockHash(), stats.coins_count, tip->nChainTx);
-    afile << metadata;
 
-    COutPoint key;
-    Coin coin;
-    unsigned int iter = 0;
+    try {
+        afile << metadata;
 
-    while (pcursor->Valid()) {
-        if (iter % 5000 == 0 && !IsRPCRunning()) {
-            throw JSONRPCError(RPC_CLIENT_NOT_CONNECTED, "Shutting down");
+        COutPoint key;
+        Coin coin;
+        unsigned int iter = 0;
+
+        while (pcursor->Valid()) {
+            if (iter % 5000 == 0 && !IsRPCRunning()) {
+                throw JSONRPCError(RPC_CLIENT_NOT_CONNECTED, "Shutting down");
+            }
+            ++iter;
+            if (pcursor->GetKey(key) && pcursor->GetValue(coin)) {
+                afile << key;
+                afile << coin;
+            } else {
+                throw JSONRPCError(RPC_INTERNAL_ERROR, "Unable to read UTXO set");
+            }
+            pcursor->Next();
         }
-        ++iter;
-        if (pcursor->GetKey(key) && pcursor->GetValue(coin)) {
-            afile << key;
-            afile << coin;
-        } else {
-            throw JSONRPCError(RPC_INTERNAL_ERROR, "Unable to read UTXO set");
-        }
-        pcursor->Next();
+
+        afile.fclose();
+    } catch (...) {
+        // Don't leave a stale .incomplete file behind on failure.
+        afile.fclose();
+        fs::remove(temppath);
+        throw;
     }
-
-    afile.fclose();
     fs::rename(temppath, path);
 
     UniValue result(UniValue::VOBJ);
@@ -2066,6 +2093,10 @@ UniValue loadtxoutset(const JSONRPCRequest& request)
             "\nLoad a previously dumped UTXO set from disk into the active chainstate.\n"
             "The snapshot base block must already be part of the active chain, and the\n"
             "provided txoutset hash must match the snapshot contents.\n"
+            "\nNote: this call rewinds the active chain to genesis before applying the\n"
+            "snapshot, which requires block and undo data for every block in the active\n"
+            "chain. It therefore cannot be used on pruned nodes, and may take a very\n"
+            "long time on long chains. The node is unresponsive while this call runs.\n"
             "\nArguments:\n"
             "1. \"path\"           (string, required) Path to the snapshot file. If relative, will be prefixed by datadir.\n"
             "2. \"txoutset_hash\"  (string, required) Expected hash_serialized_2 for the snapshot contents.\n"
@@ -2083,6 +2114,10 @@ UniValue loadtxoutset(const JSONRPCRequest& request)
 
     const fs::path path = fs::absolute(request.params[0].get_str(), GetDataDir());
     const uint256 expected_hash = ParseHashV(request.params[1], "txoutset_hash");
+
+    if (fPruneMode) {
+        throw JSONRPCError(RPC_MISC_ERROR, "loadtxoutset requires the full chain to be rewound and cannot be used on a pruned node");
+    }
 
     FILE* file = fsbridge::fopen(path, "rb");
     if (file == nullptr) {
@@ -2139,24 +2174,32 @@ UniValue loadtxoutset(const JSONRPCRequest& request)
     }
 
     CValidationState state;
-    if (!RewindChainstateToGenesis(state, Params())) {
-        throw JSONRPCError(RPC_INTERNAL_ERROR, "Unable to rewind chainstate: " + FormatStateMessage(state));
-    }
-
     {
-        FILE* load_file = fsbridge::fopen(path, "rb");
-        if (load_file == nullptr) {
-            throw JSONRPCError(RPC_INVALID_PARAMETER, "Couldn't reopen file " + path.string() + " for reading");
-        }
-        CAutoFile afile(load_file, SER_DISK, CLIENT_VERSION);
-        afile >> metadata;
-        if (!LoadSnapshotCoins(afile, metadata)) {
-            throw JSONRPCError(RPC_INTERNAL_ERROR, "Unable to load snapshot coins into chainstate");
-        }
-    }
+        // Hold cs_main across the rewind, the snapshot load and the tip
+        // activation so that no other thread (e.g. the message handler
+        // calling ActivateBestChain or flushing pcoinsTip) can observe or
+        // modify the chainstate while it is in an intermediate state.
+        LOCK(cs_main);
 
-    if (!ActivateSnapshotTip(state, Params(), snapshot_index)) {
-        throw JSONRPCError(RPC_INTERNAL_ERROR, "Unable to activate loaded snapshot: " + FormatStateMessage(state));
+        if (!RewindChainstateToGenesis(state, Params())) {
+            throw JSONRPCError(RPC_INTERNAL_ERROR, "Unable to rewind chainstate: " + FormatStateMessage(state));
+        }
+
+        {
+            FILE* load_file = fsbridge::fopen(path, "rb");
+            if (load_file == nullptr) {
+                throw JSONRPCError(RPC_INVALID_PARAMETER, "Couldn't reopen file " + path.string() + " for reading");
+            }
+            CAutoFile afile(load_file, SER_DISK, CLIENT_VERSION);
+            afile >> metadata;
+            if (!LoadSnapshotCoins(afile, metadata)) {
+                throw JSONRPCError(RPC_INTERNAL_ERROR, "Unable to load snapshot coins into chainstate");
+            }
+        }
+
+        if (!ActivateSnapshotTip(state, Params(), snapshot_index)) {
+            throw JSONRPCError(RPC_INTERNAL_ERROR, "Unable to activate loaded snapshot: " + FormatStateMessage(state));
+        }
     }
 
     UniValue result(UniValue::VOBJ);

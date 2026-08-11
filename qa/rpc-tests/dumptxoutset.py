@@ -89,6 +89,15 @@ class DumptxoutsetTest(BitcoinTestFramework):
             invalid_path,
         )
 
+        # A stale .incomplete file should not block a new dump
+        stale_out_path = os.path.join(datadir, "utxos4.dat")
+        stale_temp_path = stale_out_path + ".incomplete"
+        with open(stale_temp_path, "w") as f:
+            f.write("stale")
+        result3 = node.dumptxoutset(stale_out_path)
+        assert os.path.exists(result3['path'])
+        assert not os.path.exists(stale_temp_path), "stale .incomplete file still present"
+
         print("dumptxoutset tests passed")
 
 
