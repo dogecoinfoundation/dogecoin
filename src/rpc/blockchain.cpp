@@ -973,6 +973,12 @@ static bool ComputeSnapshotStats(
                 ApplyStats(stats, ss, prevkey, outputs);
                 outputs.clear();
             }
+            // Reject records that would silently be de-duplicated by the
+            // outputs map and therefore hash identically to a clean snapshot.
+            // This only catches duplicates within a run of records for the
+            // same txid; out-of-order duplicates alter the serialized hash
+            // and LoadSnapshotCoins provides the authoritative per-outpoint
+            // duplicate check.
             if (key.hash == prevkey && outputs.count(key.n)) {
                 error = strprintf("Bad snapshot data after deserializing %d coins - duplicate coin record", coins_loaded);
                 return false;
