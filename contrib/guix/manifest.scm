@@ -654,6 +654,9 @@ inspecting signatures in Mach-O binaries.")
         autoconf
         automake
         pkg-config
+        ;; liboqs is in the default package set for every host and builds with
+        ;; cmake, so it cannot stay in the darwin-only list
+        cmake
         bison
         ;; Scripting
         perl
@@ -698,5 +701,5 @@ inspecting signatures in Mach-O binaries.")
            ;; only the old c++/4.2.1 libstdc++, and guix's clang ships none.
            ;; Same LLVM 6 release, so the headers match what gitian compiles
            ;; against.
-           (list clang-toolchain-6 libcxx-6 binutils imagemagick libtiff librsvg font-tuffy cmake xorriso libcap))
+           (list clang-toolchain-6 libcxx-6 binutils imagemagick libtiff librsvg font-tuffy xorriso libcap))
           (else '())))))
