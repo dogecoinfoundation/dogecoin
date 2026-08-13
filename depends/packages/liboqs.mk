@@ -12,7 +12,7 @@ define $(package)_build_cmds
 	cmake -DOQS_BUILD_ONLY_LIB=ON -DOQS_USE_OPENSSL=OFF -DBUILD_SHARED_LIBS=OFF \
 		-DOQS_ENABLE_SIG_RACCOON_G=ON -DOQS_ENABLE_SIG_raccoon_g_44=ON \
 		-DOQS_MINIMAL_BUILD="KEM_ml_kem_768;SIG_falcon_512;SIG_falcon_1024;SIG_ml_dsa_44;SIG_ml_dsa_65;SIG_ml_dsa_87;SIG_slh_dsa_pure_shake_128s;SIG_slh_dsa_pure_shake_128f;SIG_raccoon_g_44" \
-		-DCMAKE_INSTALL_PREFIX=$(host_prefix) .. && \
+		-DCMAKE_INSTALL_PREFIX=$(host_prefix) -DCMAKE_INSTALL_LIBDIR=lib .. && \
 	$(MAKE)
 endef
 
@@ -27,7 +27,7 @@ define $(package)_build_cmds
 	mkdir -p build && cd build && \
 	cmake -DOQS_BUILD_ONLY_LIB=ON -DOQS_USE_OPENSSL=OFF -DBUILD_SHARED_LIBS=OFF \
 		-DOQS_MINIMAL_BUILD="KEM_ml_kem_768;SIG_falcon_512;SIG_falcon_1024;SIG_ml_dsa_44;SIG_ml_dsa_65;SIG_ml_dsa_87;SIG_slh_dsa_pure_shake_128s;SIG_slh_dsa_pure_shake_128f" \
-		-DCMAKE_INSTALL_PREFIX=$(host_prefix) .. && \
+		-DCMAKE_INSTALL_PREFIX=$(host_prefix) -DCMAKE_INSTALL_LIBDIR=lib .. && \
 	$(MAKE)
 endef
 
