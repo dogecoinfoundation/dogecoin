@@ -243,19 +243,49 @@ SOURCE_DATE_EPOCH="${SOURCE_DATE_EPOCH:-$(git -c log.showSignature=false log --f
 # across time.
 #
 # The pin is Guix tag v1.4.0 (2022-12-18). Savannah is the live upstream; the
-# GitHub mirror is gone. GUIX_CHANNEL_URL may point at a local bare clone
-# (file:///path/to/guix-repo.git) to work around the libgit2 redirect bug --
-# authentication is unaffected, the commit is verified either way.
+# GitHub mirror is gone. GUIX_CHANNEL_URL may point somewhere else to work
+# around the libgit2 redirect bug -- authentication is unaffected, the commit is
+# verified either way, so any source carrying it produces the same Guix.
+GUIX_CHANNEL_PIN=8e2f32cee982d42a79e53fc1e9aa7b8ff0514714
+GUIX_CHANNEL_DEFAULT_URL=https://git.savannah.gnu.org/git/guix.git
+GUIX_CHANNEL_MIRROR_URL=https://codeberg.org/guix/guix.git
+
 time-machine() {
+    local rc=0
     # shellcheck disable=SC2086
-    guix time-machine --url="${GUIX_CHANNEL_URL:-https://git.savannah.gnu.org/git/guix.git}" \
-                      --commit=8e2f32cee982d42a79e53fc1e9aa7b8ff0514714 \
+    guix time-machine --url="${GUIX_CHANNEL_URL:-$GUIX_CHANNEL_DEFAULT_URL}" \
+                      --commit="$GUIX_CHANNEL_PIN" \
                       --cores="$JOBS" \
                       --keep-failed \
                       --fallback \
                       ${SUBSTITUTE_URLS:+--substitute-urls="$SUBSTITUTE_URLS"} \
                       ${ADDITIONAL_GUIX_COMMON_FLAGS} ${ADDITIONAL_GUIX_TIMEMACHINE_FLAGS} \
-                      -- "$@"
+                      -- "$@" || rc=$?
+    if [ "$rc" -eq 0 ]; then
+        return 0
+    fi
+    if [ -z "${GUIX_CHANNEL_URL:-}" ]; then
+        cat 1>&2 <<EOF
+
+guix time-machine failed. If the error above is
+
+    Git error: cannot redirect from 'git.savannah.gnu.org' to ...
+
+then it is the libgit2 redirect bug, not a problem with this tree. Point the
+channel at a source that does not redirect and re-run. The mirror carries the
+same pinned commit, and the commit is authenticated either way, so the resulting
+Guix is identical:
+
+    GUIX_CHANNEL_URL=$GUIX_CHANNEL_MIRROR_URL ./contrib/guix/guix-build
+
+Or clone once and build from a local copy:
+
+    git clone --bare $GUIX_CHANNEL_DEFAULT_URL \$HOME/guix-repo.git
+    GUIX_CHANNEL_URL=file://\$HOME/guix-repo.git ./contrib/guix/guix-build
+
+EOF
+    fi
+    return $rc
 }
 
 

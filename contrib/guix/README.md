@@ -106,16 +106,29 @@ what makes the result stable over time: package *definitions* change too.
 The first run fetches and authenticates that commit, which takes a while and
 verifies tens of thousands of signatures. It is a one-time cost.
 
-If fetching from Savannah is slow or hits a libgit2 redirect problem, point
-`GUIX_CHANNEL_URL` at a local clone:
+Savannah trips a libgit2 redirect bug in some Guix versions, which fails before
+any building starts:
+
+```
+guix time-machine: error: Git error: cannot redirect from 'git.savannah.gnu.org' to ...
+```
+
+Point `GUIX_CHANNEL_URL` at a source that does not redirect. Codeberg carries the
+same pinned commit and needs no local clone:
+
+```sh
+env GUIX_CHANNEL_URL=https://codeberg.org/guix/guix.git ./contrib/guix/guix-build
+```
+
+A local clone works too, and also helps when Savannah is merely slow:
 
 ```sh
 git clone --mirror https://git.savannah.gnu.org/git/guix.git ~/guix-repo.git
 env GUIX_CHANNEL_URL=file://$HOME/guix-repo.git ./contrib/guix/guix-build
 ```
 
-The commit is authenticated against the channel introduction either way, so a
-local mirror does not weaken the check.
+The commit is authenticated against the channel introduction either way, so
+neither a mirror nor a local clone weakens the check.
 
 ## macOS SDK
 
